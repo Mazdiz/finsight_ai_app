@@ -9,8 +9,26 @@ dotenv.config();
 
 const app = express();
 
+
 // 1. Security & Access
-app.use(cors());
+const allowedOrigins = [
+  "http://localhost:3000",
+  "https://finsightaiapp.vercel.app" // Your production URL
+];
+
+app.use(cors({
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.indexOf(origin) === -1) {
+      return callback(new Error('CORS policy: This origin is not allowed'), false);
+    }
+    return callback(null, true);
+  },
+  methods: ["GET", "POST", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-CSRF-Token"],
+  credentials: true
+}));
 
 // 2. Request Parsing
 // We keep the 10mb limit in case you eventually upload business logos/files for reports
