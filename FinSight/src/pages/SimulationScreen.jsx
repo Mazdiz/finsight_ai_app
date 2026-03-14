@@ -62,6 +62,23 @@ const SimulationScreen = () => {
     return Math.round(impact);
   };
 
+  // Generate fallback benefits if API fails
+  const generateFallbackBenefits = (oldScore, newScore) => {
+    const improvement = newScore - oldScore;
+    
+    if (improvement > 15) {
+      return "By making significant adjustments to your finances, your business shows major improvement in liquidity and stability. This strategy moves you toward a healthier financial position.";
+    } else if (improvement > 5) {
+      return "Your strategic adjustments have moved your business toward a more stable financial position. Continue focusing on key areas for further improvement.";
+    } else if (improvement > 0) {
+      return "Minor improvements to your financial metrics have been applied, showing slight progress in your business health. Consider more aggressive adjustments for better results.";
+    } else if (improvement < 0) {
+      return "Your adjustments have reduced your score. Consider different strategies or smaller adjustments to improve your business health.";
+    } else {
+      return "No significant changes detected. Try adjusting the sliders to see how different strategies might impact your business health.";
+    }
+  };
+
   // SECURITY MEASURE 1: Authentication check on mount
   useEffect(() => {
     const validateSession = async () => {
@@ -105,7 +122,7 @@ const SimulationScreen = () => {
           
           // Initialize sliders for each selected item
           const initialSliders = {};
-          items.forEach((item, index) => {
+          items.forEach((item) => {
             initialSliders[`slider_${item.id}`] = 0;
           });
           setSliders(initialSliders);
@@ -153,6 +170,7 @@ const SimulationScreen = () => {
     setSliders(prev => ({ ...prev, [sliderId]: parseInt(value) }));
   };
 
+  // Handle See Impact with potential_benefits
   const handleSeeImpact = async () => {
     generateCSRFToken();
     
@@ -181,36 +199,84 @@ const SimulationScreen = () => {
       
       console.log('📤 Sending adjustments:', adjustments);
       
-      // Save simulation results
+      // Calculate impact
+      const impact = calculateScoreImpact();
+      const newScore = Math.min(100, Math.max(0, healthScore + impact));
+      
+      // 🔥 DEBUG: Check what's being sent to the API
+      const apiPayload = {
+        original_data: {
+          inventory_days: parseFloat(formData.daysToSell) || 0,
+          monthly_cash_surplus: parseFloat(formData.monthlyProfit) || 0,
+          monthly_wages: parseFloat(formData.staffSalaries) || 0,
+          monthly_loan_payment: parseFloat(formData.loanPayments) || 0,
+          total_assets: parseFloat(formData.totalAssets) || 0,
+          total_debt: parseFloat(formData.totalDebt) || 0,
+          sector: formData.businessSector || '',
+          currency: formData.currency || currency,
+        },
+        adjustments: adjustments
+      };
+      
+      console.log('🚨 FULL API PAYLOAD:', JSON.stringify(apiPayload, null, 2));
+      console.log('🚨 formData contents:', formData);
+      
+      let potentialBenefits = '';
+      let apiResult = null;
+      
+      // TRY API FIRST - Get potential_benefits from /simulate endpoint
+      try {
+        apiResult = await runSimulation(formData, adjustments);
+        setSimulationData(apiResult);
+        
+        // Get potential_benefits from API response
+        potentialBenefits = apiResult?.potential_benefits || '';
+        console.log('✅ API simulation successful. Benefits:', potentialBenefits);
+        
+      } catch (err) {
+        console.log('⚠️ API failed, using local data only:', err);
+      }
+      
+      // Generate fallback benefits if API didn't provide them
+      if (!potentialBenefits) {
+        potentialBenefits = generateFallbackBenefits(healthScore, newScore);
+        console.log('📝 Using fallback benefits:', potentialBenefits);
+      }
+      
+      // Save ALL simulation results including potential_benefits
       const results = {
         baseScore: healthScore,
-        newScore: currentScore,
-        scoreImpact: scoreImpact,
+        newScore: newScore,
+        scoreImpact: impact,
         selectedItems: selectedImpactItems,
+        potentialBenefits: potentialBenefits,
+        currency: currency,
         timestamp: Date.now()
       };
       
+      console.log('💾 SAVING TO SESSION STORAGE WITH BENEFITS:', results);
       sessionStorage.setItem('simulationResults', JSON.stringify(results));
-      
-      // Try API
-      try {
-        const result = await runSimulation(formData, adjustments);
-        setSimulationData(result);
-      } catch (err) {
-        console.log('⚠️ API failed, using local data');
-      }
       
       navigate('/updated-score');
       
     } catch (err) {
-      console.log('❌ Error:', err);
+      console.log('❌ Error in handleSeeImpact:', err);
+      
+      // Fallback with generated benefits
+      const impact = calculateScoreImpact();
+      const newScore = Math.min(100, Math.max(0, healthScore + impact));
+      const fallbackBenefits = generateFallbackBenefits(healthScore, newScore);
+      
       sessionStorage.setItem('simulationResults', JSON.stringify({
         baseScore: healthScore,
-        newScore: currentScore,
-        scoreImpact,
+        newScore: newScore,
+        scoreImpact: impact,
         selectedItems: selectedImpactItems,
+        potentialBenefits: fallbackBenefits,
+        currency: currency,
         timestamp: Date.now()
       }));
+      
       navigate('/updated-score');
     }
   };

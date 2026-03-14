@@ -8,72 +8,71 @@ import { generateToken, verifyToken } from '../utils/token';
 import { getAuthToken } from '../utils/token';
 import config from '../config/env';
 
-// ALL 54 African countries with their currencies
 const africanCurrencies = [
-  // North Africa (7 countries)
-  { country: 'Algeria', currency: 'Algerian Dinar', code: 'DZD', symbol: 'د.ج', flag: '🇩🇿' },
-  { country: 'Egypt', currency: 'Egyptian Pound', code: 'EGP', symbol: 'E£', flag: '🇪🇬' },
-  { country: 'Libya', currency: 'Libyan Dinar', code: 'LYD', symbol: 'ل.د', flag: '🇱🇾' },
-  { country: 'Morocco', currency: 'Moroccan Dirham', code: 'MAD', symbol: 'MAD', flag: '🇲🇦' },
-  { country: 'Sudan', currency: 'Sudanese Pound', code: 'SDG', symbol: 'SDG', flag: '🇸🇩' },
-  { country: 'Tunisia', currency: 'Tunisian Dinar', code: 'TND', symbol: 'د.ت', flag: '🇹🇳' },
-  { country: 'Western Sahara', currency: 'Moroccan Dirham', code: 'MAD', symbol: 'MAD', flag: '🇪🇭' },
+  // NORTH AFRICA (6 countries)
+  { country: 'Algeria', currency: 'Algerian Dinar', code: 'DZD', symbol: 'د.ج', flag: '🇩🇿', region: 'North Africa' },
+  { country: 'Egypt', currency: 'Egyptian Pound', code: 'EGP', symbol: 'E£', flag: '🇪🇬', region: 'North Africa' },
+  { country: 'Libya', currency: 'Libyan Dinar', code: 'LYD', symbol: 'ل.د', flag: '🇱🇾', region: 'North Africa' },
+  { country: 'Morocco', currency: 'Moroccan Dirham', code: 'MAD', symbol: 'MAD', flag: '🇲🇦', region: 'North Africa' },
+  { country: 'Tunisia', currency: 'Tunisian Dinar', code: 'TND', symbol: 'د.ت', flag: '🇹🇳', region: 'North Africa' },
+  { country: 'Western Sahara', currency: 'Moroccan Dirham', code: 'MAD', symbol: 'MAD', flag: '🇪🇭', region: 'North Africa' },
 
-  // West Africa (16 countries)
-  { country: 'Benin', currency: 'West African CFA Franc', code: 'XOF', symbol: 'CFA', flag: '🇧🇯' },
-  { country: 'Burkina Faso', currency: 'West African CFA Franc', code: 'XOF', symbol: 'CFA', flag: '🇧🇫' },
-  { country: 'Cabo Verde', currency: 'Cape Verdean Escudo', code: 'CVE', symbol: 'CVE', flag: '🇨🇻' },
-  { country: 'Côte d\'Ivoire', currency: 'West African CFA Franc', code: 'XOF', symbol: 'CFA', flag: '🇨🇮' },
-  { country: 'Gambia', currency: 'Gambian Dalasi', code: 'GMD', symbol: 'D', flag: '🇬🇲' },
-  { country: 'Ghana', currency: 'Ghanaian Cedi', code: 'GHS', symbol: '₵', flag: '🇬🇭' },
-  { country: 'Guinea', currency: 'Guinean Franc', code: 'GNF', symbol: 'FG', flag: '🇬🇳' },
-  { country: 'Guinea-Bissau', currency: 'West African CFA Franc', code: 'XOF', symbol: 'CFA', flag: '🇬🇼' },
-  { country: 'Liberia', currency: 'Liberian Dollar', code: 'LRD', symbol: 'L$', flag: '🇱🇷' },
-  { country: 'Mali', currency: 'West African CFA Franc', code: 'XOF', symbol: 'CFA', flag: '🇲🇱' },
-  { country: 'Mauritania', currency: 'Mauritanian Ouguiya', code: 'MRU', symbol: 'UM', flag: '🇲🇷' },
-  { country: 'Niger', currency: 'West African CFA Franc', code: 'XOF', symbol: 'CFA', flag: '🇳🇪' },
-  { country: 'Nigeria', currency: 'Nigerian Naira', code: 'NGN', symbol: '₦', flag: '🇳🇬' },
-  { country: 'Senegal', currency: 'West African CFA Franc', code: 'XOF', symbol: 'CFA', flag: '🇸🇳' },
-  { country: 'Sierra Leone', currency: 'Sierra Leonean Leone', code: 'SLL', symbol: 'Le', flag: '🇸🇱' },
-  { country: 'Togo', currency: 'West African CFA Franc', code: 'XOF', symbol: 'CFA', flag: '🇹🇬' },
+  // WEST AFRICA (16 countries)
+  { country: 'Benin', currency: 'West African CFA Franc', code: 'XOF', symbol: 'CFA', flag: '🇧🇯', region: 'West Africa' },
+  { country: 'Burkina Faso', currency: 'West African CFA Franc', code: 'XOF', symbol: 'CFA', flag: '🇧🇫', region: 'West Africa' },
+  { country: 'Cabo Verde', currency: 'Cape Verdean Escudo', code: 'CVE', symbol: 'CVE', flag: '🇨🇻', region: 'West Africa' },
+  { country: 'Côte d\'Ivoire', currency: 'West African CFA Franc', code: 'XOF', symbol: 'CFA', flag: '🇨🇮', region: 'West Africa' },
+  { country: 'Gambia', currency: 'Gambian Dalasi', code: 'GMD', symbol: 'D', flag: '🇬🇲', region: 'West Africa' },
+  { country: 'Ghana', currency: 'Ghanaian Cedi', code: 'GHS', symbol: '₵', flag: '🇬🇭', region: 'West Africa' },
+  { country: 'Guinea', currency: 'Guinean Franc', code: 'GNF', symbol: 'FG', flag: '🇬🇳', region: 'West Africa' },
+  { country: 'Guinea-Bissau', currency: 'West African CFA Franc', code: 'XOF', symbol: 'CFA', flag: '🇬🇼', region: 'West Africa' },
+  { country: 'Liberia', currency: 'Liberian Dollar', code: 'LRD', symbol: 'L$', flag: '🇱🇷', region: 'West Africa' },
+  { country: 'Mali', currency: 'West African CFA Franc', code: 'XOF', symbol: 'CFA', flag: '🇲🇱', region: 'West Africa' },
+  { country: 'Mauritania', currency: 'Mauritanian Ouguiya', code: 'MRU', symbol: 'UM', flag: '🇲🇷', region: 'West Africa' },
+  { country: 'Niger', currency: 'West African CFA Franc', code: 'XOF', symbol: 'CFA', flag: '🇳🇪', region: 'West Africa' },
+  { country: 'Nigeria', currency: 'Nigerian Naira', code: 'NGN', symbol: '₦', flag: '🇳🇬', region: 'West Africa' },
+  { country: 'Senegal', currency: 'West African CFA Franc', code: 'XOF', symbol: 'CFA', flag: '🇸🇳', region: 'West Africa' },
+  { country: 'Sierra Leone', currency: 'Sierra Leonean Leone', code: 'SLL', symbol: 'Le', flag: '🇸🇱', region: 'West Africa' },
+  { country: 'Togo', currency: 'West African CFA Franc', code: 'XOF', symbol: 'CFA', flag: '🇹🇬', region: 'West Africa' },
 
-  // Central Africa (9 countries)
-  { country: 'Cameroon', currency: 'Central African CFA Franc', code: 'XAF', symbol: 'FCFA', flag: '🇨🇲' },
-  { country: 'Central African Republic', currency: 'Central African CFA Franc', code: 'XAF', symbol: 'FCFA', flag: '🇨🇫' },
-  { country: 'Chad', currency: 'Central African CFA Franc', code: 'XAF', symbol: 'FCFA', flag: '🇹🇩' },
-  { country: 'Congo', currency: 'Central African CFA Franc', code: 'XAF', symbol: 'FCFA', flag: '🇨🇬' },
-  { country: 'Democratic Republic of the Congo', currency: 'Congolese Franc', code: 'CDF', symbol: 'FC', flag: '🇨🇩' },
-  { country: 'Equatorial Guinea', currency: 'Central African CFA Franc', code: 'XAF', symbol: 'FCFA', flag: '🇬🇶' },
-  { country: 'Gabon', currency: 'Central African CFA Franc', code: 'XAF', symbol: 'FCFA', flag: '🇬🇦' },
-  { country: 'São Tomé and Príncipe', currency: 'São Tomé Dobra', code: 'STN', symbol: 'Db', flag: '🇸🇹' },
-  { country: 'Rwanda', currency: 'Rwandan Franc', code: 'RWF', symbol: 'FRw', flag: '🇷🇼' },
+  // CENTRAL AFRICA (9 countries)
+  { country: 'Cameroon', currency: 'Central African CFA Franc', code: 'XAF', symbol: 'FCFA', flag: '🇨🇲', region: 'Central Africa' },
+  { country: 'Central African Republic', currency: 'Central African CFA Franc', code: 'XAF', symbol: 'FCFA', flag: '🇨🇫', region: 'Central Africa' },
+  { country: 'Chad', currency: 'Central African CFA Franc', code: 'XAF', symbol: 'FCFA', flag: '🇹🇩', region: 'Central Africa' },
+  { country: 'Congo', currency: 'Central African CFA Franc', code: 'XAF', symbol: 'FCFA', flag: '🇨🇬', region: 'Central Africa' },
+  { country: 'Democratic Republic of the Congo', currency: 'Congolese Franc', code: 'CDF', symbol: 'FC', flag: '🇨🇩', region: 'Central Africa' },
+  { country: 'Equatorial Guinea', currency: 'Central African CFA Franc', code: 'XAF', symbol: 'FCFA', flag: '🇬🇶', region: 'Central Africa' },
+  { country: 'Gabon', currency: 'Central African CFA Franc', code: 'XAF', symbol: 'FCFA', flag: '🇬🇦', region: 'Central Africa' },
+  { country: 'São Tomé and Príncipe', currency: 'São Tomé Dobra', code: 'STN', symbol: 'Db', flag: '🇸🇹', region: 'Central Africa' },
+  { country: 'Rwanda', currency: 'Rwandan Franc', code: 'RWF', symbol: 'FRw', flag: '🇷🇼', region: 'Central Africa' },
 
-  // East Africa (14 countries)
-  { country: 'Burundi', currency: 'Burundian Franc', code: 'BIF', symbol: 'FBu', flag: '🇧🇮' },
-  { country: 'Comoros', currency: 'Comorian Franc', code: 'KMF', symbol: 'CF', flag: '🇰🇲' },
-  { country: 'Djibouti', currency: 'Djiboutian Franc', code: 'DJF', symbol: 'Fdj', flag: '🇩🇯' },
-  { country: 'Eritrea', currency: 'Eritrean Nakfa', code: 'ERN', symbol: 'Nfk', flag: '🇪🇷' },
-  { country: 'Ethiopia', currency: 'Ethiopian Birr', code: 'ETB', symbol: 'Br', flag: '🇪🇹' },
-  { country: 'Kenya', currency: 'Kenyan Shilling', code: 'KES', symbol: 'KSh', flag: '🇰🇪' },
-  { country: 'Madagascar', currency: 'Malagasy Ariary', code: 'MGA', symbol: 'Ar', flag: '🇲🇬' },
-  { country: 'Malawi', currency: 'Malawian Kwacha', code: 'MWK', symbol: 'MK', flag: '🇲🇼' },
-  { country: 'Mauritius', currency: 'Mauritian Rupee', code: 'MUR', symbol: '₨', flag: '🇲🇺' },
-  { country: 'Mozambique', currency: 'Mozambican Metical', code: 'MZN', symbol: 'MT', flag: '🇲🇿' },
-  { country: 'Seychelles', currency: 'Seychellois Rupee', code: 'SCR', symbol: 'SR', flag: '🇸🇨' },
-  { country: 'Somalia', currency: 'Somali Shilling', code: 'SOS', symbol: 'SOS', flag: '🇸🇴' },
-  { country: 'South Sudan', currency: 'South Sudanese Pound', code: 'SSP', symbol: 'SSP', flag: '🇸🇸' },
-  { country: 'Tanzania', currency: 'Tanzanian Shilling', code: 'TZS', symbol: 'TSh', flag: '🇹🇿' },
-  { country: 'Uganda', currency: 'Ugandan Shilling', code: 'UGX', symbol: 'USh', flag: '🇺🇬' },
-  { country: 'Zambia', currency: 'Zambian Kwacha', code: 'ZMW', symbol: 'ZK', flag: '🇿🇲' },
-  { country: 'Zimbabwe', currency: 'Zimbabwean Gold', code: 'ZWG', symbol: 'ZiG', flag: '🇿🇼' },
+  // EAST AFRICA (18 countries) - SUDAN MOVED HERE!
+  { country: 'Burundi', currency: 'Burundian Franc', code: 'BIF', symbol: 'FBu', flag: '🇧🇮', region: 'East Africa' },
+  { country: 'Comoros', currency: 'Comorian Franc', code: 'KMF', symbol: 'CF', flag: '🇰🇲', region: 'East Africa' },
+  { country: 'Djibouti', currency: 'Djiboutian Franc', code: 'DJF', symbol: 'Fdj', flag: '🇩🇯', region: 'East Africa' },
+  { country: 'Eritrea', currency: 'Eritrean Nakfa', code: 'ERN', symbol: 'Nfk', flag: '🇪🇷', region: 'East Africa' },
+  { country: 'Ethiopia', currency: 'Ethiopian Birr', code: 'ETB', symbol: 'Br', flag: '🇪🇹', region: 'East Africa' },
+  { country: 'Kenya', currency: 'Kenyan Shilling', code: 'KES', symbol: 'KSh', flag: '🇰🇪', region: 'East Africa' },
+  { country: 'Madagascar', currency: 'Malagasy Ariary', code: 'MGA', symbol: 'Ar', flag: '🇲🇬', region: 'East Africa' },
+  { country: 'Malawi', currency: 'Malawian Kwacha', code: 'MWK', symbol: 'MK', flag: '🇲🇼', region: 'East Africa' },
+  { country: 'Mauritius', currency: 'Mauritian Rupee', code: 'MUR', symbol: '₨', flag: '🇲🇺', region: 'East Africa' },
+  { country: 'Mozambique', currency: 'Mozambican Metical', code: 'MZN', symbol: 'MT', flag: '🇲🇿', region: 'East Africa' },
+  { country: 'Seychelles', currency: 'Seychellois Rupee', code: 'SCR', symbol: 'SR', flag: '🇸🇨', region: 'East Africa' },
+  { country: 'Somalia', currency: 'Somali Shilling', code: 'SOS', symbol: 'SOS', flag: '🇸🇴', region: 'East Africa' },
+  { country: 'South Sudan', currency: 'South Sudanese Pound', code: 'SSP', symbol: 'SSP', flag: '🇸🇸', region: 'East Africa' },
+  { country: 'Sudan', currency: 'Sudanese Pound', code: 'SDG', symbol: 'SDG', flag: '🇸🇩', region: 'East Africa' }, // ✓ MOVED HERE
+  { country: 'Tanzania', currency: 'Tanzanian Shilling', code: 'TZS', symbol: 'TSh', flag: '🇹🇿', region: 'East Africa' },
+  { country: 'Uganda', currency: 'Ugandan Shilling', code: 'UGX', symbol: 'USh', flag: '🇺🇬', region: 'East Africa' },
+  { country: 'Zambia', currency: 'Zambian Kwacha', code: 'ZMW', symbol: 'ZK', flag: '🇿🇲', region: 'East Africa' },
+  { country: 'Zimbabwe', currency: 'Zimbabwean Gold', code: 'ZWG', symbol: 'ZiG', flag: '🇿🇼', region: 'East Africa' },
 
-  // Southern Africa (5 countries)
-  { country: 'Angola', currency: 'Angolan Kwanza', code: 'AOA', symbol: 'Kz', flag: '🇦🇴' },
-  { country: 'Botswana', currency: 'Botswana Pula', code: 'BWP', symbol: 'P', flag: '🇧🇼' },
-  { country: 'Eswatini', currency: 'Swazi Lilangeni', code: 'SZL', symbol: 'E', flag: '🇸🇿' },
-  { country: 'Lesotho', currency: 'Lesotho Loti', code: 'LSL', symbol: 'L', flag: '🇱🇸' },
-  { country: 'Namibia', currency: 'Namibian Dollar', code: 'NAD', symbol: 'N$', flag: '🇳🇦' },
-  { country: 'South Africa', currency: 'South African Rand', code: 'ZAR', symbol: 'R', flag: '🇿🇦' }
+  // SOUTHERN AFRICA (6 countries)
+  { country: 'Angola', currency: 'Angolan Kwanza', code: 'AOA', symbol: 'Kz', flag: '🇦🇴', region: 'Southern Africa' },
+  { country: 'Botswana', currency: 'Botswana Pula', code: 'BWP', symbol: 'P', flag: '🇧🇼', region: 'Southern Africa' },
+  { country: 'Eswatini', currency: 'Swazi Lilangeni', code: 'SZL', symbol: 'E', flag: '🇸🇿', region: 'Southern Africa' },
+  { country: 'Lesotho', currency: 'Lesotho Loti', code: 'LSL', symbol: 'L', flag: '🇱🇸', region: 'Southern Africa' },
+  { country: 'Namibia', currency: 'Namibian Dollar', code: 'NAD', symbol: 'N$', flag: '🇳🇦', region: 'Southern Africa' },
+  { country: 'South Africa', currency: 'South African Rand', code: 'ZAR', symbol: 'R', flag: '🇿🇦', region: 'Southern Africa' }
 ];
 
 // Business sectors

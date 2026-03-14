@@ -13,11 +13,20 @@ const UpdatedScoreScreen = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   
-  // Data from simulation - initialize with defaults
-  const [beforeScore, setBeforeScore] = useState(0);
-  const [afterScore, setAfterScore] = useState(0);
+  // Data from simulation
+  const [beforeScore, setBeforeScore] = useState(58);
+  const [afterScore, setAfterScore] = useState(58);
   const [scoreImpact, setScoreImpact] = useState(0);
-  const [statusText, setStatusText] = useState('');
+  const [statusText, setStatusText] = useState('Fairly Good');
+  const [currency, setCurrency] = useState('USD');
+  const [currencySymbol, setCurrencySymbol] = useState('$');
+  
+  // 🔥 NEW: State for potential benefits
+  const [potentialBenefits, setPotentialBenefits] = useState([
+    "A more stable foundation to build upon.",
+    "Reduced risk of defaulting on existing obligations.",
+    "First steps toward long-term financial sustainability."
+  ]);
 
   // Get score color based on value
   const getScoreColor = (score) => {
@@ -41,6 +50,18 @@ const UpdatedScoreScreen = () => {
     return '#EF4444';
   };
 
+  // 🔥 Helper to format benefits for display
+  const formatBenefits = (benefitsText) => {
+    if (!benefitsText) return [];
+    
+    // Split by sentences
+    const sentences = benefitsText.split('. ').filter(s => s.trim().length > 0);
+    
+    // Add period back if missing
+    return sentences.map(s => s.endsWith('.') ? s : s + '.');
+  };
+
+  // SECURITY MEASURE 1: Authentication check on mount
   useEffect(() => {
     const validateSession = async () => {
       try {
@@ -56,70 +77,60 @@ const UpdatedScoreScreen = () => {
           generateCSRFToken();
         }
 
-        // Get original score from diagnosis (ResultsDashboard)
+        // Get currency from session storage
+        const storedCurrency = sessionStorage.getItem('currency') || 'USD';
+        const storedSymbol = sessionStorage.getItem('currencySymbol') || '$';
+        setCurrency(storedCurrency);
+        setCurrencySymbol(storedSymbol);
+
+        // Get original score from diagnosis
         let originalScore = 58;
         const storedDiagnosis = sessionStorage.getItem('diagnosisResult');
         
         if (diagnosisData && diagnosisData.health_score) {
           originalScore = diagnosisData.health_score;
-          console.log('1️⃣ Original score from diagnosisData:', originalScore);
+          console.log('📊 Original score from diagnosisData:', originalScore);
         } else if (storedDiagnosis) {
           try {
             const parsed = JSON.parse(storedDiagnosis);
             originalScore = parsed.health_score || 58;
-            console.log('1️⃣ Original score from sessionStorage:', originalScore);
+            console.log('📊 Original score from sessionStorage:', originalScore);
           } catch (e) {
             console.error('Error parsing storedDiagnosis:', e);
           }
         }
+        setBeforeScore(originalScore);
 
-        // CRITICAL: Get simulation results - this is the score from the sliders!
-        let newScore = originalScore;
-        let impact = 0;
+        // 🔥 Get simulation results including potential benefits
         const storedSimulation = sessionStorage.getItem('simulationResults');
         
         if (storedSimulation) {
           try {
             const parsed = JSON.parse(storedSimulation);
-            console.log('2️⃣ RAW SIMULATION DATA FROM STORAGE:', parsed);
+            console.log('📦 Loaded simulation results:', parsed);
             
-            // Use the currentScore from simulation (this is what user sees)
-            if (parsed.newScore !== undefined) {
-              newScore = parsed.newScore;
-              console.log('3️⃣ USING newScore from simulation:', newScore);
+            // Set scores
+            setAfterScore(parsed.newScore || originalScore);
+            setScoreImpact(parsed.scoreImpact || 0);
+            
+            // 🔥 CRITICAL: Get potential benefits from stored results
+            if (parsed.potentialBenefits) {
+              const formattedBenefits = formatBenefits(parsed.potentialBenefits);
+              setPotentialBenefits(formattedBenefits);
+              console.log('✅ Benefits loaded:', formattedBenefits);
             }
-            
-            if (parsed.scoreImpact !== undefined) {
-              impact = parsed.scoreImpact;
-            } else {
-              impact = newScore - originalScore;
-            }
-            
-            console.log('4️⃣ Final - Original:', originalScore, 'New:', newScore, 'Impact:', impact);
             
           } catch (e) {
-            console.error('Error parsing storedSimulation:', e);
+            console.error('Error parsing simulation results:', e);
           }
-        } else if (simulationData && simulationData.newScore) {
-          console.log('2️⃣ Using simulationData from context:', simulationData);
-          newScore = simulationData.newScore;
-          impact = simulationData.scoreImpact || (newScore - originalScore);
-        } else {
-          console.log('⚠️ No simulation data found, using original score');
+        } else if (simulationData && simulationData.potential_benefits) {
+          // Try from context if available
+          const formattedBenefits = formatBenefits(simulationData.potential_benefits);
+          setPotentialBenefits(formattedBenefits);
         }
-        
-        // Set all the values
-        setBeforeScore(originalScore);
-        setAfterScore(newScore);
-        setScoreImpact(impact);
-        setStatusText(getStatusTextFromScore(newScore));
-        
-        console.log('5️⃣ FINAL STATE:', {
-          beforeScore: originalScore,
-          afterScore: newScore,
-          scoreImpact: impact,
-          statusText: getStatusTextFromScore(newScore)
-        });
+
+        // Update status text based on afterScore
+        setStatusText(getStatusTextFromScore(afterScore));
 
         setIsAuthenticated(true);
       } catch (err) {
@@ -131,11 +142,16 @@ const UpdatedScoreScreen = () => {
     };
 
     validateSession();
-  }, [navigate, simulationData, diagnosisData]);
+  }, [navigate, simulationData, diagnosisData, afterScore]);
+
+  const handleViewRecommendations = () => {
+    generateCSRFToken();
+    navigate('/ai-coach');
+  };
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-[#DCE5E6] flex justify-center p-4">
+      <div className="min-h-screen bg-[#DCE5E6] flex justify-center p-4" style={{ fontFamily: 'Poppins' }}>
         <div className="w-[395px] bg-white rounded-[30px] shadow-xl overflow-hidden relative flex items-center justify-center">
           <p className="text-center text-gray-500">Loading your updated score...</p>
         </div>
@@ -145,7 +161,7 @@ const UpdatedScoreScreen = () => {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-[#DCE5E6] flex justify-center p-4">
+      <div className="min-h-screen bg-[#DCE5E6] flex justify-center p-4" style={{ fontFamily: 'Poppins' }}>
         <div className="w-[395px] bg-white rounded-[30px] shadow-xl overflow-hidden relative flex items-center justify-center">
           <div className="text-center p-6">
             <p className="text-red-500 mb-4">{error}</p>
@@ -162,7 +178,7 @@ const UpdatedScoreScreen = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[#DCE5E6] flex justify-center p-4">
+    <div className="min-h-screen bg-[#DCE5E6] flex justify-center p-4" style={{ fontFamily: 'Poppins' }}>
       <div className="w-[395px] bg-white rounded-[30px] shadow-xl overflow-hidden relative">
         {/* Header with back arrow */}
         <div className="absolute top-6 left-0 right-0 flex items-center justify-center z-10">
@@ -182,7 +198,7 @@ const UpdatedScoreScreen = () => {
         </div>
 
         <div className="px-6 pt-24 pb-8">
-          {/* Score Circle - Shows AFTER score (what user got from sliders) */}
+          {/* Score Circle */}
           <div className="flex justify-center items-center mb-2">
             <div 
               className="w-32 h-32 rounded-full flex items-center justify-center relative"
@@ -230,7 +246,6 @@ const UpdatedScoreScreen = () => {
           <div className="border-2 rounded-[20px] p-5 mb-8" style={{ borderColor: '#998F8F' }}>
             <h2 className="text-base font-medium mb-3" style={{ color: '#998F8F' }}>Before Vs After</h2>
             
-            {/* Before - Original score */}
             <div className="mb-4">
               <div className="flex justify-between items-center mb-1">
                 <span className="text-sm" style={{ color: '#D9D9D9' }}>Before Simulation</span>
@@ -247,7 +262,6 @@ const UpdatedScoreScreen = () => {
               </div>
             </div>
             
-            {/* After - Score from simulation sliders */}
             <div>
               <div className="flex justify-between items-center mb-1">
                 <span className="text-sm" style={{ color: '#D9D9D9' }}>After Simulation</span>
@@ -265,29 +279,22 @@ const UpdatedScoreScreen = () => {
             </div>
           </div>
 
-          {/* Potential Benefits Card */}
+          {/* 🔥 Potential Benefits Card - NOW DYNAMIC FROM SIMULATION! */}
           <div className="bg-[#FFF8F8] rounded-[20px] p-6 mb-6 border-2" style={{ borderColor: '#D9D9D9' }}>
             <h2 className="text-base font-medium text-gray-900 mb-4 text-center">Potential Benefits;</h2>
             <div className="space-y-4 text-center">
-              <p className="text-sm text-gray-600 leading-relaxed">
-                <span className="font-medium text-gray-900">1.</span> A more stable foundation to build upon.
-              </p>
-              <p className="text-sm text-gray-600 leading-relaxed">
-                <span className="font-medium text-gray-900">2.</span> Reduced risk of defaulting on existing obligations.
-              </p>
-              <p className="text-sm text-gray-600 leading-relaxed">
-                <span className="font-medium text-gray-900">3.</span> First steps toward long-term financial sustainability.
-              </p>
+              {potentialBenefits.map((benefit, index) => (
+                <p key={index} className="text-sm text-gray-600 leading-relaxed">
+                  <span className="font-medium text-gray-900">{index + 1}.</span> {benefit}
+                </p>
+              ))}
             </div>
           </div>
 
           {/* View Recommendations Button */}
           <div className="flex justify-center">
             <button
-              onClick={() => {
-                generateCSRFToken();
-                navigate('/ai-coach');
-              }}
+              onClick={handleViewRecommendations}
               disabled={!isAuthenticated}
               className="font-semibold py-3 px-6 shadow-md transition-all duration-200 transform hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
               style={{ 

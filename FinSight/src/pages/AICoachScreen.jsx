@@ -25,6 +25,29 @@ const AICoachScreen = () => {
   const [finalScore, setFinalScore] = useState(0);
   const [sector, setSector] = useState('');
   const [currencySym, setCurrencySym] = useState('$');
+  const [recommendationSource, setRecommendationSource] = useState('AI Model');
+
+  // Get score color based on value
+  const getScoreColor = (score) => {
+    if (score >= 80) return '#10B981';
+    if (score >= 60) return '#F59E0B';
+    if (score >= 40) return '#F97316';
+    return '#EF4444';
+  };
+
+  const getStatusTextFromScore = (score) => {
+    if (score >= 80) return 'Excellent';
+    if (score >= 60) return 'Good';
+    if (score >= 40) return 'Fairly Good';
+    return 'At Risk';
+  };
+
+  const getStatusColor = (score) => {
+    if (score >= 80) return '#10B981';
+    if (score >= 60) return '#F59E0B';
+    if (score >= 40) return '#F97316';
+    return '#EF4444';
+  };
 
   // SECURITY MEASURE 1: Authentication check on mount
   useEffect(() => {
@@ -44,6 +67,7 @@ const AICoachScreen = () => {
 
         // Load simulation data
         const storedSimulation = sessionStorage.getItem('simulationResult');
+        const storedUpdatedScore = sessionStorage.getItem('simulationResults');
         const storedDiagnosis = sessionStorage.getItem('diagnosisResult');
         const storedSector = sessionStorage.getItem('businessSector') || '';
         const storedCurrency = sessionStorage.getItem('currencySymbol') || '$';
@@ -52,14 +76,21 @@ const AICoachScreen = () => {
         setSector(storedSector);
 
         // Get final score from simulation data
-        if (simulationData) {
-          setFinalScore(simulationData.final_score);
+        let score = 64;
+        if (simulationData && simulationData.final_score) {
+          score = simulationData.final_score;
         } else if (storedSimulation) {
           const parsed = JSON.parse(storedSimulation);
-          setFinalScore(parsed.final_score);
+          score = parsed.final_score || 64;
+        } else if (storedUpdatedScore) {
+          const parsed = JSON.parse(storedUpdatedScore);
+          score = parsed.newScore || 64;
         }
+        setFinalScore(score);
 
         setIsAuthenticated(true);
+        console.log('✅ AICoachScreen authenticated, score:', score);
+        
       } catch (err) {
         setError('Authentication failed. Please try again.');
       } finally {
@@ -70,7 +101,7 @@ const AICoachScreen = () => {
     validateSession();
   }, [navigate, simulationData]);
 
-  // SECURITY MEASURE 2: Fetch coach advice using useCoach hook
+  // Separate useEffect for fetching coach advice
   useEffect(() => {
     const fetchCoachAdvice = async () => {
       if (!isAuthenticated) return;
@@ -78,55 +109,138 @@ const AICoachScreen = () => {
       try {
         setIsLoading(true);
         
-        // Prepare payload from simulation data
+        // Prepare payload for ML model from all available data
         const storedSimulation = sessionStorage.getItem('simulationResult');
-        const simulationResult = simulationData || (storedSimulation ? JSON.parse(storedSimulation) : null);
+        const storedUpdatedScore = sessionStorage.getItem('simulationResults');
+        const storedDiagnosis = sessionStorage.getItem('diagnosisResult');
         
-        if (!simulationResult) {
-          // Fallback to static data if no simulation
-          setActionSteps([
-            "Focus on reducing your single highest-cost expense within the next 30 days.",
-            "Increase monthly revenue by 10% before taking on additional debt.",
-            "Build a minimum cash reserve equivalent to 2 months of operating expenses."
-          ]);
-          setGrowthTips([
-            "Negotiate longer payment terms with your top 3 suppliers this quarter.",
-            "Audit your product/service pricing against current market rates.",
-            "Join a local business association for access to group purchasing and training."
-          ]);
-          setIsLoading(false);
-          return;
+        // Build comprehensive user data for the ML model
+        const userData = {
+          sector: sector,
+          final_score: finalScore,
+          currency: currency || 'USD',
+          adjusted_data: {},
+          timestamp: Date.now()
+        };
+        
+        // Add diagnosis data if available
+        if (diagnosisData) {
+          userData.diagnosis = diagnosisData;
+          console.log('📊 Using diagnosisData from context');
+        } else if (storedDiagnosis) {
+          try {
+            userData.diagnosis = JSON.parse(storedDiagnosis);
+            console.log('📊 Using diagnosisData from sessionStorage');
+          } catch (e) {
+            console.log('Error parsing diagnosis:', e);
+          }
+        }
+        
+        // Add simulation data if available
+        if (simulationData) {
+          userData.simulation = simulationData;
+          userData.adjusted_data = simulationData.adjusted_data || {};
+          console.log('📊 Using simulationData from context');
+        } else if (storedSimulation) {
+          try {
+            userData.simulation = JSON.parse(storedSimulation);
+            userData.adjusted_data = userData.simulation.adjusted_data || {};
+            console.log('📊 Using simulationData from sessionStorage');
+          } catch (e) {
+            console.log('Error parsing simulation:', e);
+          }
+        } else if (storedUpdatedScore) {
+          try {
+            userData.updatedScore = JSON.parse(storedUpdatedScore);
+            console.log('📊 Using updatedScore from sessionStorage');
+          } catch (e) {
+            console.log('Error parsing updated score:', e);
+          }
         }
 
-        // Call the coach API using the hook
-        const result = await getAdvice(simulationResult);
+        console.log('📤 Sending to ML Coach Model:', userData);
+        setRecommendationSource('AI Model');
+
+        // Call the ML model API through your hook
+        const result = await getAdvice(userData);
+        console.log('✅ ML Model response:', result);
         
-        setActionSteps(result.action_steps || []);
-        setGrowthTips(result.growth_tips || []);
-        setCoachData(result);
+        if (result && result.action_steps && result.growth_tips) {
+          setActionSteps(result.action_steps);
+          setGrowthTips(result.growth_tips);
+          setCoachData(result);
+        } else {
+          // If result is empty but no error, use fallback
+          console.log('⚠️ ML model returned empty, using fallback');
+          setFallbackRecommendations();
+        }
         
       } catch (err) {
-        console.error('Coach API failed:', err);
-        // Fallback to static data
-        setActionSteps([
-          "Focus on reducing your single highest-cost expense within the next 30 days.",
-          "Increase monthly revenue by 10% before taking on additional debt.",
-          "Build a minimum cash reserve equivalent to 2 months of operating expenses."
-        ]);
-        setGrowthTips([
-          "Negotiate longer payment terms with your top 3 suppliers this quarter.",
-          "Audit your product/service pricing against current market rates.",
-          "Join a local business association for access to group purchasing and training."
-        ]);
+        console.error('❌ Coach API failed:', err);
+        setFallbackRecommendations();
       } finally {
         setIsLoading(false);
       }
     };
 
-    fetchCoachAdvice();
-  }, [isAuthenticated, simulationData, getAdvice]);
+    // Only fetch if authenticated and score is set
+    if (isAuthenticated && finalScore > 0) {
+      fetchCoachAdvice();
+    }
+  }, [isAuthenticated, finalScore, sector, currency, diagnosisData, simulationData, getAdvice]);
 
-  // SECURITY MEASURE 3: Handle download with fallback to local PDF generation
+  // Define the fallback function inside the component
+  const setFallbackRecommendations = () => {
+    setRecommendationSource('Fallback');
+    console.log('📝 Using fallback recommendations for score:', finalScore);
+    
+    if (finalScore >= 80) {
+      setActionSteps([
+        "Maintain your excellent financial health by continuing current strategies.",
+        "Consider expanding your business or investing surplus cash.",
+        "Build an emergency fund covering 6 months of expenses."
+      ]);
+      setGrowthTips([
+        "Explore new market opportunities to leverage your strong position.",
+        "Review your portfolio for diversification options.",
+        "Connect with financial advisors for wealth management strategies."
+      ]);
+    } else if (finalScore >= 60) {
+      setActionSteps([
+        "Focus on reducing your single highest-cost expense within the next 30 days.",
+        "Increase monthly revenue by 10% before taking on additional debt.",
+        "Build a minimum cash reserve equivalent to 2 months of operating expenses."
+      ]);
+      setGrowthTips([
+        "Negotiate longer payment terms with your top 3 suppliers this quarter.",
+        "Audit your product/service pricing against current market rates.",
+        "Join a local business association for access to group purchasing and training."
+      ]);
+    } else if (finalScore >= 40) {
+      setActionSteps([
+        "Immediately cut non-essential expenses by 15%.",
+        "Contact lenders to negotiate lower interest rates on existing debt.",
+        "Focus on collecting outstanding receivables to improve cash flow."
+      ]);
+      setGrowthTips([
+        "Consider consolidating high-interest debt.",
+        "Explore alternative revenue streams with low overhead.",
+        "Create a strict budget and track every expense."
+      ]);
+    } else {
+      setActionSteps([
+        "Seek professional financial advice immediately.",
+        "Create an emergency action plan to address critical issues.",
+        "Consider debt restructuring or consolidation options."
+      ]);
+      setGrowthTips([
+        "Focus on survival strategies first - cash is king.",
+        "Explore government assistance programs for businesses.",
+        "Communicate openly with creditors about your situation."
+      ]);
+    }
+  };
+
   const handleDownloadPDF = async () => {
     if (!isAuthenticated) {
       setError('Please authenticate before downloading');
@@ -137,69 +251,58 @@ const AICoachScreen = () => {
     generateCSRFToken();
     
     try {
-      // Try API first
-      try {
-        const reportData = {
-          sector: sector,
-          final_score: finalScore,
-          currency: currency || 'USD',
-          action_steps: actionSteps,
-          growth_tips: growthTips,
-        };
-        
-        await downloadPDFReport(reportData);
-        console.log('PDF downloaded successfully via API');
-      } catch (apiErr) {
-        console.log('API download failed, using local PDF generation', apiErr);
-        // Fallback to local PDF generation
-        downloadScoreAsPDF(
-          finalScore || 64,
-          sector || 'Business',
-          new Date().toLocaleDateString(),
-          { actionSteps, growthTips }
-        );
-      }
+      const reportData = {
+        sector: sector,
+        final_score: finalScore,
+        currency: currency || 'USD',
+        action_steps: actionSteps,
+        growth_tips: growthTips,
+        source: recommendationSource
+      };
+      
+      await downloadPDFReport(reportData);
+      console.log('PDF downloaded successfully');
+      
     } catch (err) {
       console.error('Download failed:', err);
-      // Ultimate fallback
       downloadScoreAsPDF(
         finalScore || 64,
         sector || 'Business',
         new Date().toLocaleDateString(),
-        { actionSteps, growthTips }
+        { actionSteps, growthTips, source: recommendationSource }
       );
     } finally {
       setIsDownloading(false);
     }
   };
 
-  // SECURITY MEASURE 4: Handle new assessment
   const handleNewAssessment = () => {
     generateCSRFToken();
-    // Clear session data but keep authentication
     sessionStorage.removeItem('formData');
     sessionStorage.removeItem('selectedItems');
     sessionStorage.removeItem('simulationData');
     sessionStorage.removeItem('simulationResult');
+    sessionStorage.removeItem('simulationResults');
     sessionStorage.removeItem('coachAdvice');
     navigate('/business-info');
   };
 
-  // SECURITY MEASURE 5: Loading state (combine local and hook loading)
   if (isLoading || coachLoading) {
     return (
-      <div className="min-h-screen bg-[#DCE5E6] flex justify-center p-4" style={{ fontFamily: 'Poppins' }}>
+      <div className="min-h-screen bg-[#DCE5E6] flex justify-center p-4">
         <div className="w-[395px] bg-white rounded-[30px] shadow-xl overflow-hidden relative flex items-center justify-center">
-          <p className="text-center text-gray-500">Loading AI recommendations...</p>
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#2C6C71] mx-auto mb-4"></div>
+            <p className="text-gray-500">AI Coach is analyzing your financial data...</p>
+          </div>
         </div>
       </div>
     );
   }
 
-  // SECURITY MEASURE 6: Error state (combine local and hook error)
   if (error || coachError) {
     return (
-      <div className="min-h-screen bg-[#DCE5E6] flex justify-center p-4" style={{ fontFamily: 'Poppins' }}>
+      <div className="min-h-screen bg-[#DCE5E6] flex justify-center p-4">
         <div className="w-[395px] bg-white rounded-[30px] shadow-xl overflow-hidden relative flex items-center justify-center">
           <div className="text-center p-6">
             <p className="text-red-500 mb-4">{error || coachError}</p>
@@ -216,16 +319,15 @@ const AICoachScreen = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[#DCE5E6] flex justify-center p-4" style={{ fontFamily: 'Poppins' }}>
+    <div className="min-h-screen bg-[#DCE5E6] flex justify-center p-4">
       <div className="w-[395px] bg-white rounded-[30px] shadow-xl overflow-hidden relative">
-        {/* SECURITY MEASURE 7: Back button with CSRF token */}
         <div className="absolute top-6 left-0 right-0 flex items-center justify-center z-10">
           <button 
             onClick={() => {
               generateCSRFToken();
               navigate('/updated-score');
             }}
-            className="absolute left-4 text-xl text-gray-500 hover:text-gray-700 transition-colors duration-200"
+            className="absolute left-4 text-xl text-gray-500 hover:text-gray-700"
             style={{ fontSize: '24px', fontWeight: '300' }}
           >
             &lt;
@@ -233,27 +335,33 @@ const AICoachScreen = () => {
           <h1 className="text-xl font-semibold" style={{ color: '#01272B' }}>
             AI Coach Recommendations
           </h1>
+          {recommendationSource === 'AI Model' ? (
+            <span className="absolute right-4 text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">
+              ML Powered
+            </span>
+          ) : (
+            <span className="absolute right-4 text-xs bg-yellow-100 text-yellow-700 px-2 py-1 rounded-full">
+              Preview Mode
+            </span>
+          )}
         </div>
 
         <div className="px-5 pt-20 pb-6">
-          {/* Subtitle */}
           <p className="text-xs text-gray-500 text-center mb-6">
-            Personalised guidance based on your financial profile
+            Personalized guidance based on your financial profile
           </p>
 
-          {/* Projected Score Card */}
           <div className="bg-[#FFF8F8] rounded-[20px] p-5 mb-8 border-2" style={{ borderColor: '#D9D9D9' }}>
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm font-medium" style={{ color: '#998F8F' }}>Projected Score</span>
-              <span className="text-sm" style={{ color: '#EFB700' }}>Fairly Good</span>
+              <span className="text-sm" style={{ color: getStatusColor(finalScore) }}>{getStatusTextFromScore(finalScore)}</span>
             </div>
             <div className="text-left">
-              <span className="text-3xl font-bold" style={{ color: '#EFB700' }}>{finalScore || 64}</span>
+              <span className="text-3xl font-bold" style={{ color: getScoreColor(finalScore) }}>{finalScore || 64}</span>
               <span className="text-xl text-gray-400">/100</span>
             </div>
           </div>
 
-          {/* Action Steps Card */}
           <div className="bg-[#FFF8F8] rounded-[20px] p-5 mb-6 border-2" style={{ borderColor: '#D9D9D9' }}>
             <h2 className="text-base font-semibold text-gray-800 mb-3">Action Steps:</h2>
             <div className="space-y-3">
@@ -265,7 +373,6 @@ const AICoachScreen = () => {
             </div>
           </div>
 
-          {/* Growth Tips Card */}
           <div className="bg-[#FFF8F8] rounded-[20px] p-5 mb-6 border-2" style={{ borderColor: '#D9D9D9' }}>
             <h2 className="text-base font-semibold text-gray-800 mb-3">Growth Tips:</h2>
             <div className="space-y-3">
@@ -277,14 +384,13 @@ const AICoachScreen = () => {
             </div>
           </div>
 
-          {/* Disclaimer Text */}
           <p className="text-[10px] text-gray-400 text-center leading-relaxed mb-6 px-2">
-            These recommendations are generated from your self-reported data. They do not constitute professional financial advice. Consult a qualified financial advisor before making major business decisions.
+            These recommendations are generated by our AI model based on your financial data.
+            {recommendationSource === 'AI Model' ? ' Powered by machine learning.' : ' Using preview mode.'}
+            They do not constitute professional financial advice.
           </p>
 
-          {/* Buttons Container */}
           <div className="space-y-3">
-            {/* Download Report Button - NOW WITH FALLBACK */}
             <button
               onClick={handleDownloadPDF}
               onMouseEnter={() => setIsDownloadHovered(true)}
@@ -299,7 +405,6 @@ const AICoachScreen = () => {
               {isDownloading ? 'Downloading...' : 'Download Report'}
             </button>
 
-            {/* Start New Assessment Button */}
             <button
               onClick={handleNewAssessment}
               onMouseEnter={() => setIsAssessmentHovered(true)}
@@ -317,7 +422,6 @@ const AICoachScreen = () => {
             </button>
           </div>
 
-          {/* Bottom spacing */}
           <div className="h-4"></div>
         </div>
       </div>

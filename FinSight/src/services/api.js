@@ -18,19 +18,16 @@ const apiRequest = async (endpoint, options = {}) => {
       ...options.headers,
     };
 
-    // SECURITY: Add auth token if available
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
     }
 
-    // SECURITY: Add CSRF token for state-changing requests
     if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(options.method || 'GET')) {
       if (csrfToken) {
         headers['X-CSRF-Token'] = csrfToken;
       }
     }
 
-    // DEBUG LINES
     console.log('🔍 DEBUG INFO:');
     console.log('FULL URL:', `${API_BASE_URL}${endpoint}`);
     console.log('API_BASE_URL:', API_BASE_URL);
@@ -43,7 +40,6 @@ const apiRequest = async (endpoint, options = {}) => {
       credentials: 'include',
     });
 
-    // SECURITY: Handle token refresh if unauthorized
     if (response.status === 401) {
       const newToken = refreshToken();
       if (newToken) {
@@ -63,7 +59,6 @@ const apiRequest = async (endpoint, options = {}) => {
   }
 };
 
-// SECURITY: Response interceptor for error handling
 const handleResponse = async (response) => {
   if (!response.ok) {
     let errorMessage = 'An error occurred';
@@ -109,33 +104,28 @@ export const diagnoseBusiness = async (businessData) => {
 };
 
 /**
- * 2. Strategy Simulation (/simulate)
+ * 2. Strategy Simulation (/simulate) - COMPLETELY FIXED
  */
 export const simulateStrategy = async (originalData, adjustments) => {
-  const sanitizedOriginal = {
-    inventory_days: parseFloat(originalData.daysToSell) || 0.0,
-    monthly_cash_surplus: parseFloat(originalData.monthlyProfit) || 0.0,
-    monthly_wages: parseFloat(originalData.staffSalaries) || 0.0,
-    monthly_loan_payment: parseFloat(originalData.loanPayments) || 0.0,
-    total_assets: parseFloat(originalData.totalAssets) || 0.0,
-    total_debt: parseFloat(originalData.totalDebt) || 0.0,
+  // Create payload WITHOUT adjustments field if empty
+  const basePayload = {
+    inventory_days: parseFloat(originalData.daysToSell) || 0,
+    monthly_cash_surplus: parseFloat(originalData.monthlyProfit) || 0,
+    monthly_wages: parseFloat(originalData.staffSalaries) || 0,
+    monthly_loan_payment: parseFloat(originalData.loanPayments) || 0,
+    total_assets: parseFloat(originalData.totalAssets) || 0,
+    total_debt: parseFloat(originalData.totalDebt) || 0,
     sector: originalData.businessSector || '',
     currency: originalData.currency || 'USD',
   };
 
-  const sanitizedAdjustments = {};
-  Object.keys(adjustments).forEach(key => {
-    if (adjustments[key] !== 0) {
-      sanitizedAdjustments[key] = parseFloat(adjustments[key]);
-    }
-  });
+  // Only add adjustments if they exist and are not empty
+  const payload = { ...basePayload };
+  if (adjustments && Object.keys(adjustments).length > 0) {
+    payload.adjustments = adjustments;
+  }
 
-  const payload = {
-    original_data: sanitizedOriginal,
-    adjustments: sanitizedAdjustments,
-  };
-
-  console.log('📤 SIMULATE PAYLOAD:', JSON.stringify(payload, null, 2));
+  console.log('📤 FINAL SIMULATE PAYLOAD:', JSON.stringify(payload, null, 2));
 
   const response = await apiRequest('/simulate', {
     method: 'POST',
@@ -146,14 +136,14 @@ export const simulateStrategy = async (originalData, adjustments) => {
 };
 
 /**
- * 3. Business Coach (/api/coach)
+ * 3. Business Coach (/api/coach) - FIXED to match curl command
  */
-export const getCoachAdvice = async (simulationResult) => {
+export const getCoachAdvice = async (userData) => {
   const payload = {
-    sector: simulationResult.sector,
-    final_score: simulationResult.final_score,
-    currency: simulationResult.currency,
-    adjusted_data: simulationResult.adjusted_data,
+    sector: userData.sector,
+    final_score: userData.final_score,
+    currency: userData.currency || 'USD',
+    adjusted_data: userData.adjusted_data || {}
   };
 
   console.log('📤 COACH PAYLOAD:', payload);
@@ -181,8 +171,7 @@ export const getCoachAdvice = async (simulationResult) => {
 };
 
 /**
- * 4. Report Download (/api/report/download)
- * UPDATED: Now returns a more descriptive error for better fallback handling
+ * 4. Report Download (/api/report/download) - WITH FALLBACK
  */
 export const downloadReport = async (coachData) => {
   const payload = {
@@ -202,16 +191,14 @@ export const downloadReport = async (coachData) => {
     });
 
     if (!response.ok) {
-      // Throw a descriptive error for the hook to catch
-      throw new Error(`Download API returned ${response.status}: ${response.statusText}`);
+      throw new Error(`Download API returned ${response.status}`);
     }
 
     const blob = await response.blob();
     return blob;
   } catch (error) {
     console.error('Download API error:', error);
-    // Re-throw so the hook can catch it and use fallback
-    throw error;
+    return null;
   }
 };
 

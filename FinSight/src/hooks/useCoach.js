@@ -2,48 +2,37 @@ import { useState, useCallback } from 'react';
 import { getCoachAdvice, downloadReport } from '../services/api';
 import { getAuthToken } from '../utils/token';
 import { generateCSRFToken } from '../utils/cookies';
-import downloadScoreAsPDF from '../utils/download'; // Add this import
+import downloadScoreAsPDF from '../utils/download';
 import config from '../config/env';
 
-/**
- * Custom hook for AI coach
- * Handles API calls, loading states, and errors
- */
 export const useCoach = () => {
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState(null);
   const [coachAdvice, setCoachAdvice] = useState(null);
 
-  const getAdvice = useCallback(async (simulationResult) => {
+  const getAdvice = useCallback(async (userData) => {
     setLoading(true);
     setError(null);
 
     try {
-      // SECURITY: Verify authentication
       const token = getAuthToken();
       if (!token) {
         throw new Error('Authentication required');
       }
 
-      // SECURITY: Generate new CSRF token
       generateCSRFToken();
 
-      // Call API
-      const result = await getCoachAdvice(simulationResult);
+      const result = await getCoachAdvice(userData);
 
-      // SECURITY: Validate response structure
       if (!result || !result.action_steps) {
         throw new Error('Invalid response from server');
       }
 
-      // Store in session storage for later use
       sessionStorage.setItem('coachAdvice', JSON.stringify(result));
-      
       setCoachAdvice(result);
       return result;
     } catch (err) {
-      // SECURITY: User-friendly error message
       const errorMessage = config.isDevelopment 
         ? err.message 
         : 'Unable to get coach advice. Please try again.';
@@ -60,20 +49,18 @@ export const useCoach = () => {
     setError(null);
 
     try {
-      // SECURITY: Verify authentication
       const token = getAuthToken();
       if (!token) {
         throw new Error('Authentication required');
       }
 
-      // SECURITY: Generate new CSRF token
       generateCSRFToken();
 
-      try {
-        // Try API first
-        const blob = await downloadReport(coachData);
-        
-        // Create download link for API blob
+      // Try API first
+      const blob = await downloadReport(coachData);
+      
+      if (blob) {
+        // API succeeded
         const url = window.URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
@@ -82,12 +69,9 @@ export const useCoach = () => {
         link.click();
         document.body.removeChild(link);
         window.URL.revokeObjectURL(url);
-        
-        console.log('PDF downloaded successfully via API');
-      } catch (apiErr) {
-        // FALLBACK: Use local PDF generation if API fails
-        console.log('API download failed, using local fallback', apiErr);
-        
+      } else {
+        // API failed (returned null), use fallback
+        console.log('Using local PDF generation fallback');
         downloadScoreAsPDF(
           coachData.final_score || 64,
           coachData.sector || 'Business',
@@ -101,7 +85,6 @@ export const useCoach = () => {
 
       return true;
     } catch (err) {
-      // SECURITY: User-friendly error message
       const errorMessage = config.isDevelopment 
         ? err.message 
         : 'Unable to download report. Please try again.';
@@ -113,7 +96,6 @@ export const useCoach = () => {
     }
   }, []);
 
-  // Clear coach data
   const clearCoachAdvice = useCallback(() => {
     setCoachAdvice(null);
     setError(null);
