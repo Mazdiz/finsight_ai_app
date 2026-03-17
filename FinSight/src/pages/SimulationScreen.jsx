@@ -14,8 +14,8 @@ const SimulationScreen = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [currency, setCurrency] = useState('USD');
-  const [currencySymbol, setCurrencySymbol] = useState('$');
+  const [currency, setCurrency] = useState('NGN');
+  const [currencySymbol, setCurrencySymbol] = useState('₦');
   const [formData, setFormData] = useState({});
   const [selectedItems, setSelectedItems] = useState([]);
   const [selectedImpactItems, setSelectedImpactItems] = useState([]);
@@ -25,6 +25,149 @@ const SimulationScreen = () => {
   
   // Slider states
   const [sliders, setSliders] = useState({});
+
+  // FUNCTION TO CLEAN NUMBER (REMOVES CURRENCY SYMBOLS AND COMMAS)
+  const cleanNumber = (value) => {
+    if (!value) return 0;
+    // Remove everything except numbers, decimal points, and minus signs
+    const cleaned = value.toString().replace(/[^0-9.-]/g, '');
+    return parseFloat(cleaned) || 0;
+  };
+
+  // FUNCTION TO FORMAT NUMBER WITH COMMAS
+  const formatNumber = (num) => {
+    return Math.round(num).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  };
+
+  // FUNCTION TO GET REAL-TIME DISPLAY VALUE - COMPLETE MAPPING
+  const getDisplayValue = (item, percentage) => {
+    // Get raw value from formData
+    let rawValue = 0;
+    let unit = '';
+    let isCurrency = false;
+
+    console.log('🔍 Processing item:', item);
+    console.log('📊 FormData available:', formData);
+
+    // Get the item title and field name
+    const title = (item.title || '').toLowerCase();
+    const field = (item.field || '').toLowerCase();
+    
+    // ===== DAYS TO SELL STOCK =====
+    if (title.includes('days') || field.includes('days') || field.includes('inventory')) {
+      rawValue = cleanNumber(formData.daysToSell);
+      rawValue = Math.min(365, Math.max(0, rawValue));
+      unit = ' days';
+      console.log('📅 Days to Sell:', rawValue);
+    }
+    
+    // ===== TOTAL DEBT =====
+    else if (title.includes('debt') || field.includes('debt')) {
+      rawValue = cleanNumber(formData.totalDebt);
+      isCurrency = true;
+      console.log('💰 Total Debt:', rawValue);
+    }
+    
+    // ===== MONTHLY PROFIT/REVENUE =====
+    else if (title.includes('profit') || title.includes('revenue') || field.includes('profit') || field.includes('revenue')) {
+      rawValue = cleanNumber(formData.monthlyProfit);
+      isCurrency = true;
+      console.log('📈 Monthly Profit:', rawValue);
+    }
+    
+    // ===== STAFF SALARIES =====
+    else if (title.includes('salary') || title.includes('staff') || field.includes('salary') || field.includes('staff')) {
+      rawValue = cleanNumber(formData.staffSalaries);
+      isCurrency = true;
+      console.log('👥 Staff Salaries:', rawValue);
+    }
+    
+    // ===== MONTHLY LOAN PAYMENTS =====
+    else if (title.includes('loan') || field.includes('loan') || title.includes('payment') || field.includes('payment')) {
+      // Try to get from formData - if not present, calculate from totalDebt
+      if (formData.monthlyLoanPayments) {
+        rawValue = cleanNumber(formData.monthlyLoanPayments);
+      } else {
+        // Estimate monthly payment as 10% of total debt (typical loan term)
+        const totalDebt = cleanNumber(formData.totalDebt);
+        rawValue = totalDebt * 0.1; // Rough estimate
+        console.log('⚠️ Monthly loan payments not found, estimating from total debt:', rawValue);
+      }
+      isCurrency = true;
+      console.log('💳 Monthly Loan Payments:', rawValue);
+    }
+    
+    // ===== TOTAL ASSETS =====
+    else if (title.includes('asset') || field.includes('asset')) {
+      rawValue = cleanNumber(formData.totalAssets);
+      isCurrency = true;
+      console.log('🏦 Total Assets:', rawValue);
+    }
+    
+    // ===== CASH RESERVES =====
+    else if (title.includes('cash') || field.includes('cash')) {
+      rawValue = cleanNumber(formData.cashReserves) || cleanNumber(formData.totalAssets) * 0.2; // Estimate if not present
+      isCurrency = true;
+      console.log('💵 Cash Reserves:', rawValue);
+    }
+    
+    // ===== PROFIT MARGIN =====
+    else if (title.includes('margin') || field.includes('margin')) {
+      // Calculate from profit and revenue if not directly available
+      if (formData.profitMargin) {
+        rawValue = cleanNumber(formData.profitMargin);
+      } else {
+        const profit = cleanNumber(formData.monthlyProfit);
+        const revenue = cleanNumber(formData.monthlyProfit); // Assuming profit is the revenue
+        rawValue = revenue > 0 ? (profit / revenue) * 100 : 20; // Default 20%
+      }
+      unit = '%';
+      console.log('📊 Profit Margin:', rawValue);
+    }
+    
+    // ===== CUSTOMER SATISFACTION =====
+    else if (title.includes('satisfaction') || field.includes('satisfaction')) {
+      rawValue = cleanNumber(formData.customerSatisfaction) || 75; // Default 75%
+      unit = '%';
+      console.log('😊 Customer Satisfaction:', rawValue);
+    }
+    
+    // ===== EMPLOYEE TURNOVER =====
+    else if (title.includes('turnover') || field.includes('turnover')) {
+      rawValue = cleanNumber(formData.employeeTurnover) || 15; // Default 15%
+      unit = '%';
+      console.log('🔄 Employee Turnover:', rawValue);
+    }
+    
+    // ===== UNKNOWN =====
+    else {
+      console.warn('❓ Unknown item type:', item);
+      rawValue = 100000; // Default fallback
+      isCurrency = true;
+    }
+
+    // Calculate new value based on percentage change
+    const newValue = rawValue + (rawValue * (percentage / 100));
+    
+    // Apply business rules
+    let finalValue;
+    if (unit === ' days') {
+      // Days must be between 1 and 365
+      finalValue = Math.min(365, Math.max(1, Math.round(newValue)));
+    } else if (unit === '%') {
+      // Percentages between 0-100
+      finalValue = Math.min(100, Math.max(0, Math.round(newValue * 10) / 10));
+    } else {
+      finalValue = Math.round(newValue);
+    }
+    
+    // Format and return
+    if (isCurrency) {
+      return `${currencySymbol}${formatNumber(finalValue)}`;
+    } else {
+      return `${formatNumber(finalValue)}${unit}`;
+    }
+  };
 
   // Get score color based on value
   const getScoreColor = (score) => {
@@ -51,11 +194,11 @@ const SimulationScreen = () => {
       
       // Different impact weights based on impact level
       if (item.impactLevel === 'high') {
-        impact += (sliderValue * -0.25); // High impact = 25% change
+        impact += (sliderValue * -0.25);
       } else if (item.impactLevel === 'medium') {
-        impact += (sliderValue * -0.15); // Medium impact = 15% change
+        impact += (sliderValue * -0.15);
       } else {
-        impact += (sliderValue * -0.08); // Low impact = 8% change
+        impact += (sliderValue * -0.08);
       }
     });
     
@@ -97,11 +240,19 @@ const SimulationScreen = () => {
 
         // Load form data and selected items from session storage
         const storedData = sessionStorage.getItem('formData');
-        const storedCurrency = sessionStorage.getItem('currency') || 'USD';
-        const storedSymbol = sessionStorage.getItem('currencySymbol') || '$';
+        const storedCurrency = sessionStorage.getItem('currency') || 'NGN';
+        const storedSymbol = sessionStorage.getItem('currencySymbol') || '₦';
         const storedSelected = sessionStorage.getItem('selectedItems');
         const storedImpactItems = sessionStorage.getItem('selectedImpactItems');
         const storedDiagnosis = sessionStorage.getItem('diagnosisResult');
+        
+        console.log('LOADING FROM SESSION:', {
+          storedData,
+          storedCurrency,
+          storedSymbol,
+          storedSelected,
+          storedImpactItems
+        });
         
         if (storedData) {
           const parsedData = JSON.parse(storedData);
@@ -110,6 +261,13 @@ const SimulationScreen = () => {
             sanitizedData[key] = sanitizeInput(parsedData[key]);
           });
           setFormData(sanitizedData);
+          console.log('✅ FORMDATA SET:', sanitizedData);
+        } else {
+          console.warn('⚠️ NO FORMDATA FOUND!');
+          if (diagnosisData && diagnosisData.formData) {
+            setFormData(diagnosisData.formData);
+            console.log('✅ FORMDATA FROM DIAGNOSIS:', diagnosisData.formData);
+          }
         }
         
         if (storedSelected) {
@@ -147,6 +305,7 @@ const SimulationScreen = () => {
 
         setIsAuthenticated(true);
       } catch (err) {
+        console.error('❌ Validation error:', err);
         setError('Authentication failed. Please try again.');
       } finally {
         setIsLoading(false);
@@ -162,7 +321,6 @@ const SimulationScreen = () => {
     setScoreImpact(impact);
     const newScore = Math.min(100, Math.max(0, healthScore + impact));
     setCurrentScore(newScore);
-    console.log('🔄 Score updated:', { healthScore, impact, newScore });
   }, [sliders, healthScore, selectedImpactItems]);
 
   const handleSliderChange = (sliderId, value) => {
@@ -175,75 +333,11 @@ const SimulationScreen = () => {
     generateCSRFToken();
     
     try {
-      const adjustments = {};
-      
-      // Build adjustments based on selected items
-      selectedImpactItems.forEach(item => {
-        const sliderValue = sliders[`slider_${item.id}`] || 0;
-        if (sliderValue !== 0) {
-          // Map to backend field names
-          const fieldMap = {
-            1: 'inventory_days',
-            2: 'monthly_cash_surplus',
-            3: 'monthly_wages',
-            4: 'monthly_loan_payment',
-            5: 'total_assets',
-            6: 'total_debt',
-          };
-          const backendField = fieldMap[item.id];
-          if (backendField) {
-            adjustments[backendField] = sliderValue;
-          }
-        }
-      });
-      
-      console.log('📤 Sending adjustments:', adjustments);
-      
-      // Calculate impact
       const impact = calculateScoreImpact();
       const newScore = Math.min(100, Math.max(0, healthScore + impact));
       
-      // 🔥 DEBUG: Check what's being sent to the API
-      const apiPayload = {
-        original_data: {
-          inventory_days: parseFloat(formData.daysToSell) || 0,
-          monthly_cash_surplus: parseFloat(formData.monthlyProfit) || 0,
-          monthly_wages: parseFloat(formData.staffSalaries) || 0,
-          monthly_loan_payment: parseFloat(formData.loanPayments) || 0,
-          total_assets: parseFloat(formData.totalAssets) || 0,
-          total_debt: parseFloat(formData.totalDebt) || 0,
-          sector: formData.businessSector || '',
-          currency: formData.currency || currency,
-        },
-        adjustments: adjustments
-      };
+      const potentialBenefits = generateFallbackBenefits(healthScore, newScore);
       
-      console.log('🚨 FULL API PAYLOAD:', JSON.stringify(apiPayload, null, 2));
-      console.log('🚨 formData contents:', formData);
-      
-      let potentialBenefits = '';
-      let apiResult = null;
-      
-      // TRY API FIRST - Get potential_benefits from /simulate endpoint
-      try {
-        apiResult = await runSimulation(formData, adjustments);
-        setSimulationData(apiResult);
-        
-        // Get potential_benefits from API response
-        potentialBenefits = apiResult?.potential_benefits || '';
-        console.log('✅ API simulation successful. Benefits:', potentialBenefits);
-        
-      } catch (err) {
-        console.log('⚠️ API failed, using local data only:', err);
-      }
-      
-      // Generate fallback benefits if API didn't provide them
-      if (!potentialBenefits) {
-        potentialBenefits = generateFallbackBenefits(healthScore, newScore);
-        console.log('📝 Using fallback benefits:', potentialBenefits);
-      }
-      
-      // Save ALL simulation results including potential_benefits
       const results = {
         baseScore: healthScore,
         newScore: newScore,
@@ -254,7 +348,7 @@ const SimulationScreen = () => {
         timestamp: Date.now()
       };
       
-      console.log('💾 SAVING TO SESSION STORAGE WITH BENEFITS:', results);
+      console.log('💾 SAVING RESULTS:', results);
       sessionStorage.setItem('simulationResults', JSON.stringify(results));
       
       navigate('/updated-score');
@@ -262,7 +356,6 @@ const SimulationScreen = () => {
     } catch (err) {
       console.log('❌ Error in handleSeeImpact:', err);
       
-      // Fallback with generated benefits
       const impact = calculateScoreImpact();
       const newScore = Math.min(100, Math.max(0, healthScore + impact));
       const fallbackBenefits = generateFallbackBenefits(healthScore, newScore);
@@ -354,36 +447,45 @@ const SimulationScreen = () => {
             Drag each slider to see how improvements affect your score in real time.
           </p>
           
-          {/* DYNAMIC SLIDERS - Only show what user selected */}
-          {selectedImpactItems.map(item => (
-            <div key={item.id} className="border-2 rounded-[15px] p-4 mb-4" style={{ borderColor: '#998F8F' }}>
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-base font-semibold text-gray-800">{item.title}</span>
-                <span className="text-base font-medium text-gray-900">
-                  {sliders[`slider_${item.id}`] > 0 ? '+' : ''}{sliders[`slider_${item.id}`] || 0}%
-                </span>
+          {/* DYNAMIC SLIDERS - REAL TIME UPDATES */}
+          {selectedImpactItems.map(item => {
+            const percentageValue = sliders[`slider_${item.id}`] || 0;
+            // THIS UPDATES IN REAL TIME WHEN SLIDER MOVES
+            const displayValue = getDisplayValue(item, percentageValue);
+            
+            return (
+              <div key={item.id} className="border-2 rounded-[15px] p-4 mb-4" style={{ borderColor: '#998F8F' }}>
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-base font-semibold text-gray-800">{item.title}</span>
+                  <span className="text-base font-medium text-gray-900">
+                    {percentageValue > 0 ? '+' : ''}{percentageValue}% 
+                    <span className="text-sm text-gray-600 ml-1">
+                      ({displayValue})
+                    </span>
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min="-100"
+                  max="100"
+                  value={percentageValue}
+                  onChange={(e) => handleSliderChange(`slider_${item.id}`, e.target.value)}
+                  className="w-full h-2 rounded-lg appearance-none cursor-pointer"
+                  style={getSliderTrackStyle(percentageValue)}
+                />
+                <div className="flex justify-between text-xs text-gray-400 mt-1">
+                  <span>-100%</span>
+                  <span>0%</span>
+                  <span>+100%</span>
+                </div>
+                <p className="text-[10px] text-gray-500 mt-2">
+                  {item.impactLevel === 'high' ? '🔴 High Impact - Dramatic effect' :
+                   item.impactLevel === 'medium' ? '🟡 Medium Impact - Moderate effect' :
+                   '🟢 Low Impact - Slight effect'}
+                </p>
               </div>
-              <input
-                type="range"
-                min="-100"
-                max="100"
-                value={sliders[`slider_${item.id}`] || 0}
-                onChange={(e) => handleSliderChange(`slider_${item.id}`, e.target.value)}
-                className="w-full h-2 rounded-lg appearance-none cursor-pointer"
-                style={getSliderTrackStyle(sliders[`slider_${item.id}`] || 0)}
-              />
-              <div className="flex justify-between text-xs text-gray-400 mt-1">
-                <span>-100%</span>
-                <span>0%</span>
-                <span>+100%</span>
-              </div>
-              <p className="text-[10px] text-gray-500 mt-2">
-                {item.impactLevel === 'high' ? '🔴 High Impact - Dramatic effect' :
-                 item.impactLevel === 'medium' ? '🟡 Medium Impact - Moderate effect' :
-                 '🟢 Low Impact - Slight effect'}
-              </p>
-            </div>
-          ))}
+            );
+          })}
 
           {/* Business Health Score Card */}
           <div 

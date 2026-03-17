@@ -32,17 +32,12 @@ const SimulationSelectionScreen = () => {
     return fieldMap[field] || field;
   };
 
-  // Format display values with proper currency
+  // Format display values
   const formatDisplayValue = (field, value, symbol) => {
-    if (!value || value === '0') {
-      if (field === 'inventory_days' || field === 'daysToSell') return '0 days';
-      return `${symbol} 0`;
-    }
-    
-    const numValue = parseFloat(value);
+    if (!value) return field === 'inventory_days' ? '0 days' : `${symbol} 0`;
+    const numValue = parseInt(value, 10);
     const formattedNum = numValue.toLocaleString();
-    
-    if (field === 'inventory_days' || field === 'daysToSell') {
+    if (field === 'inventory_days') {
       return `${formattedNum} days`;
     }
     return `${symbol} ${formattedNum}`;
@@ -75,6 +70,70 @@ const SimulationSelectionScreen = () => {
     if (score >= 60) return 'Good';
     if (score >= 40) return 'Warning';
     return 'At Risk';
+  };
+
+  // Get impact points based on level
+  const getImpactPoints = (level) => {
+    switch(level) {
+      case 'high': return '15-30 points';
+      case 'medium': return '8-15 points';
+      case 'low': return '5-8 points';
+      default: return '5-8 points';
+    }
+  };
+
+  // Get impact color based on level
+  const getImpactColor = (level) => {
+    switch(level) {
+      case 'high': return '#D20303'; // Red
+      case 'medium': return '#EFB700'; // Yellow
+      case 'low': return '#12AE00'; // Green
+      default: return '#D9D9D9';
+    }
+  };
+
+  // BUSINESS LOGIC SANITY CHECKS - Override backend if obviously wrong
+  const getSanitizedImpactLevel = (field, value, backendLevel) => {
+    const numValue = parseFloat(value) || 0;
+    
+    // Total Debt sanity check
+    if (field === 'total_debt' || field === 'totalDebt') {
+      if (numValue > 1000000) return 'high'; // Over 1M debt = ALWAYS high impact
+      if (numValue > 500000 && backendLevel === 'low') return 'medium'; // Upgrade if backend underestimates
+    }
+    
+    // Monthly Loan Payment sanity check
+    if (field === 'monthly_loan_payment' || field === 'loanPayments') {
+      if (numValue > 300000) return 'high'; // Over 300k payment = ALWAYS high impact
+      if (numValue > 100000 && backendLevel === 'low') return 'medium';
+    }
+    
+    // Total Assets sanity check (LOW assets = HIGH impact)
+    if (field === 'total_assets' || field === 'totalAssets') {
+      if (numValue < 100000) return 'high'; // Under 100k assets = ALWAYS high impact
+      if (numValue < 500000 && backendLevel === 'low') return 'medium';
+    }
+    
+    // Days to Sell Stock sanity check
+    if (field === 'inventory_days' || field === 'daysToSell') {
+      if (numValue > 180) return 'high'; // Over 180 days = ALWAYS high impact
+      if (numValue > 60 && backendLevel === 'low') return 'medium';
+    }
+    
+    // Monthly Profit sanity check (LOW profit = HIGH impact)
+    if (field === 'monthly_cash_surplus' || field === 'monthlyProfit') {
+      if (numValue < 50000) return 'high'; // Under 50k profit = ALWAYS high impact
+      if (numValue < 200000 && backendLevel === 'low') return 'medium';
+    }
+    
+    // Staff Salaries sanity check (HIGH salaries = HIGH impact)
+    if (field === 'monthly_wages' || field === 'staffSalaries') {
+      if (numValue > 500000) return 'high'; // Over 500k salaries = ALWAYS high impact
+      if (numValue > 200000 && backendLevel === 'low') return 'medium';
+    }
+    
+    // Return backend level if no override needed
+    return backendLevel;
   };
 
   // SECURITY MEASURE 1: Authentication check on mount
@@ -113,78 +172,55 @@ const SimulationSelectionScreen = () => {
         setCurrencySymbol(storedSymbol);
         setBusinessSector(sanitizeInput(storedSector));
 
-        // Get health score and impacts from diagnosis data (FROM BACKEND ML MODEL)
+        // Get health score and impacts from diagnosis data
         let score = 58;
-        
         if (diagnosisData && diagnosisData.health_score) {
           score = diagnosisData.health_score;
           setHealthScore(score);
 
-          // BUILD IMPACT ITEMS DIRECTLY FROM BACKEND RESPONSE
+          // BUILD IMPACT ITEMS FROM API RESPONSE WITH SANITY CHECKS
           if (diagnosisData.impacts) {
             const impacts = diagnosisData.impacts;
-            const items = [];
-            console.log('🤖 ML Model Impacts received:', impacts);
+            let items = [];
+            
+            console.log('🎯 Raw impacts from backend:', impacts);
+            console.log('📊 User data:', parsedData);
 
-            // ADD HIGH IMPACT ITEMS - These are the BIGGEST problems
-            if (impacts.high_impact && Array.isArray(impacts.high_impact)) {
-              impacts.high_impact.forEach((field) => {
-                const formField = getFormFieldName(field);
-                items.push({
-                  id: items.length + 1,
-                  field: field,
-                  title: mapFieldToDisplay(field),
-                  value: parsedData[formField] || '0',
-                  displayValue: formatDisplayValue(field, parsedData[formField], storedSymbol),
-                  impact: 'HIGH IMPACT',
-                  impactLevel: 'high',
-                  badgeColor: '#D20303', // Red
-                  points: '15-30 points',
-                  description: '🔴 This is your biggest opportunity for improvement'
-                });
+            // Process ALL fields dynamically
+            const allFields = [
+              ...(impacts.high_impact || []).map(f => ({ field: f, backendLevel: 'high' })),
+              ...(impacts.medium_impact || []).map(f => ({ field: f, backendLevel: 'medium' })),
+              ...(impacts.low_impact || []).map(f => ({ field: f, backendLevel: 'low' }))
+            ];
+
+            allFields.forEach(({ field, backendLevel }) => {
+              const formField = getFormFieldName(field);
+              const rawValue = parsedData[formField] || '0';
+              
+              // Apply sanity checks
+              const finalLevel = getSanitizedImpactLevel(field, rawValue, backendLevel);
+              
+              items.push({
+                id: items.length + 1,
+                field,
+                title: mapFieldToDisplay(field),
+                value: rawValue,
+                displayValue: formatDisplayValue(field, rawValue, storedSymbol),
+                impact: finalLevel === 'high' ? 'HIGH IMPACT' :
+                        finalLevel === 'medium' ? 'MEDIUM IMPACT' : 'LOW IMPACT',
+                impactLevel: finalLevel,
+                badgeColor: getImpactColor(finalLevel),
+                points: getImpactPoints(finalLevel),
+                backendLevel: backendLevel, // Keep for debugging
+                sortOrder: finalLevel === 'high' ? 1 : finalLevel === 'medium' ? 2 : 3
               });
-            }
+            });
 
-            // ADD MEDIUM IMPACT ITEMS
-            if (impacts.medium_impact && Array.isArray(impacts.medium_impact)) {
-              impacts.medium_impact.forEach((field) => {
-                const formField = getFormFieldName(field);
-                items.push({
-                  id: items.length + 1,
-                  field: field,
-                  title: mapFieldToDisplay(field),
-                  value: parsedData[formField] || '0',
-                  displayValue: formatDisplayValue(field, parsedData[formField], storedSymbol),
-                  impact: 'MEDIUM IMPACT',
-                  impactLevel: 'medium',
-                  badgeColor: '#EFB700', // Yellow
-                  points: '8-15 points',
-                  description: '🟡 Moderate impact on your score'
-                });
-              });
-            }
-
-            // ADD LOW IMPACT ITEMS
-            if (impacts.low_impact && Array.isArray(impacts.low_impact)) {
-              impacts.low_impact.forEach((field) => {
-                const formField = getFormFieldName(field);
-                items.push({
-                  id: items.length + 1,
-                  field: field,
-                  title: mapFieldToDisplay(field),
-                  value: parsedData[formField] || '0',
-                  displayValue: formatDisplayValue(field, parsedData[formField], storedSymbol),
-                  impact: 'LOW IMPACT',
-                  impactLevel: 'low',
-                  badgeColor: '#12AE00', // Green
-                  points: '5-8 points',
-                  description: '🟢 Small impact - you\'re already doing well here'
-                });
-              });
-            }
-
+            // Sort by impact level
+            items.sort((a, b) => a.sortOrder - b.sortOrder);
+            
+            console.log('✅ Final impact items with sanity checks:', items);
             setImpactItems(items);
-            console.log('✅ Built impact items from ML model:', items);
           }
         } else {
           // Try to get from session storage as fallback
@@ -196,62 +232,35 @@ const SimulationSelectionScreen = () => {
             }
             if (parsedDiagnosis.impacts) {
               const impacts = parsedDiagnosis.impacts;
-              const items = [];
+              let items = [];
               
-              // HIGH IMPACT
-              if (impacts.high_impact) {
-                impacts.high_impact.forEach((field) => {
-                  const formField = getFormFieldName(field);
-                  items.push({
-                    id: items.length + 1,
-                    field,
-                    title: mapFieldToDisplay(field),
-                    value: parsedData[formField] || '0',
-                    displayValue: formatDisplayValue(field, parsedData[formField], storedSymbol),
-                    impact: 'HIGH IMPACT',
-                    impactLevel: 'high',
-                    badgeColor: '#D20303',
-                    points: '15-30 points'
-                  });
-                });
-              }
+              const allFields = [
+                ...(impacts.high_impact || []).map(f => ({ field: f, backendLevel: 'high' })),
+                ...(impacts.medium_impact || []).map(f => ({ field: f, backendLevel: 'medium' })),
+                ...(impacts.low_impact || []).map(f => ({ field: f, backendLevel: 'low' }))
+              ];
 
-              // MEDIUM IMPACT
-              if (impacts.medium_impact) {
-                impacts.medium_impact.forEach((field) => {
-                  const formField = getFormFieldName(field);
-                  items.push({
-                    id: items.length + 1,
-                    field,
-                    title: mapFieldToDisplay(field),
-                    value: parsedData[formField] || '0',
-                    displayValue: formatDisplayValue(field, parsedData[formField], storedSymbol),
-                    impact: 'MEDIUM IMPACT',
-                    impactLevel: 'medium',
-                    badgeColor: '#EFB700',
-                    points: '8-15 points'
-                  });
+              allFields.forEach(({ field, backendLevel }) => {
+                const formField = getFormFieldName(field);
+                const rawValue = parsedData[formField] || '0';
+                const finalLevel = getSanitizedImpactLevel(field, rawValue, backendLevel);
+                
+                items.push({
+                  id: items.length + 1,
+                  field,
+                  title: mapFieldToDisplay(field),
+                  value: rawValue,
+                  displayValue: formatDisplayValue(field, rawValue, storedSymbol),
+                  impact: finalLevel === 'high' ? 'HIGH IMPACT' :
+                          finalLevel === 'medium' ? 'MEDIUM IMPACT' : 'LOW IMPACT',
+                  impactLevel: finalLevel,
+                  badgeColor: getImpactColor(finalLevel),
+                  points: getImpactPoints(finalLevel),
+                  sortOrder: finalLevel === 'high' ? 1 : finalLevel === 'medium' ? 2 : 3
                 });
-              }
+              });
 
-              // LOW IMPACT
-              if (impacts.low_impact) {
-                impacts.low_impact.forEach((field) => {
-                  const formField = getFormFieldName(field);
-                  items.push({
-                    id: items.length + 1,
-                    field,
-                    title: mapFieldToDisplay(field),
-                    value: parsedData[formField] || '0',
-                    displayValue: formatDisplayValue(field, parsedData[formField], storedSymbol),
-                    impact: 'LOW IMPACT',
-                    impactLevel: 'low',
-                    badgeColor: '#12AE00',
-                    points: '5-8 points'
-                  });
-                });
-              }
-
+              items.sort((a, b) => a.sortOrder - b.sortOrder);
               setImpactItems(items);
             }
           }
@@ -291,7 +300,7 @@ const SimulationSelectionScreen = () => {
     return (
       <div className="min-h-screen bg-[#DCE5E6] flex justify-center p-4">
         <div className="w-[395px] bg-white rounded-[30px] shadow-xl overflow-hidden relative flex items-center justify-center">
-          <p className="text-center text-gray-500">Analyzing your financial data...</p>
+          <p className="text-center text-gray-500">Loading impact analysis...</p>
         </div>
       </div>
     );
@@ -366,7 +375,7 @@ const SimulationSelectionScreen = () => {
             </div>
           </div>
 
-          {/* Impact Cards - DYNAMIC from ML MODEL */}
+          {/* Impact Cards - DYNAMICALLY SORTED with SANITY CHECKS */}
           <div className="space-y-3">
             {impactItems.map(item => {
               const isSelected = selected.includes(item.id);
@@ -409,7 +418,9 @@ const SimulationSelectionScreen = () => {
                       </div>
                       <p className="text-xs font-semibold text-gray-800">{item.displayValue}</p>
                       <p className="text-[10px] text-gray-500 mt-1">
-                        {item.description || `Fixing this will improve your score by ${item.points}`}
+                        {item.impactLevel === 'high' ? '🔴 Critical issue - Must address immediately' :
+                         item.impactLevel === 'medium' ? '🟡 Important - Should address soon' :
+                         '🟢 Minor - Can address later'}
                       </p>
                     </div>
                   </div>
