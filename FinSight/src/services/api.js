@@ -104,28 +104,61 @@ export const diagnoseBusiness = async (businessData) => {
 };
 
 /**
- * 2. Strategy Simulation (/simulate) - COMPLETELY FIXED
+ * 2. Strategy Simulation (/simulate) - ULTRA DEBUG VERSION
  */
 export const simulateStrategy = async (originalData, adjustments) => {
-  // Create payload WITHOUT adjustments field if empty
-  const basePayload = {
-    inventory_days: parseFloat(originalData.daysToSell) || 0,
-    monthly_cash_surplus: parseFloat(originalData.monthlyProfit) || 0,
-    monthly_wages: parseFloat(originalData.staffSalaries) || 0,
-    monthly_loan_payment: parseFloat(originalData.loanPayments) || 0,
-    total_assets: parseFloat(originalData.totalAssets) || 0,
-    total_debt: parseFloat(originalData.totalDebt) || 0,
-    sector: originalData.businessSector || '',
-    currency: originalData.currency || 'USD',
+  console.log('🔴🔴🔴 ========== SIMULATE DEBUG START ==========');
+  console.log('1️⃣ originalData (full):', JSON.stringify(originalData, null, 2));
+  console.log('2️⃣ adjustments:', JSON.stringify(adjustments, null, 2));
+  console.log('3️⃣ originalData.daysToSell:', originalData?.daysToSell);
+  console.log('4️⃣ originalData.monthlyProfit:', originalData?.monthlyProfit);
+  console.log('5️⃣ originalData.staffSalaries:', originalData?.staffSalaries);
+  console.log('6️⃣ originalData.loanPayments:', originalData?.loanPayments);
+  console.log('7️⃣ originalData.totalAssets:', originalData?.totalAssets);
+  console.log('8️⃣ originalData.totalDebt:', originalData?.totalDebt);
+  console.log('9️⃣ originalData.businessSector:', originalData?.businessSector);
+  console.log('🔟 originalData.currency:', originalData?.currency);
+
+  // Ensure we have valid data with proper fallbacks
+  const safeData = originalData || {};
+  
+  // Parse ALL values with Number() to ensure they're numbers
+  const inventory_days = Number(safeData.daysToSell) || 0;
+  const monthly_cash_surplus = Number(safeData.monthlyProfit) || 0;
+  const monthly_wages = Number(safeData.staffSalaries) || 0;
+  const monthly_loan_payment = Number(safeData.loanPayments) || 0;
+  const total_assets = Number(safeData.totalAssets) || 0;
+  const total_debt = Number(safeData.totalDebt) || 0;
+  const sector = safeData.businessSector || '';
+  const currency = safeData.currency || 'USD';
+
+  console.log('1️⃣1️⃣ Parsed values:', {
+    inventory_days,
+    monthly_cash_surplus,
+    monthly_wages,
+    monthly_loan_payment,
+    total_assets,
+    total_debt,
+    sector,
+    currency
+  });
+
+  // Create the payload in the EXACT format your backend expects
+  const payload = {
+    inventory_days,
+    monthly_cash_surplus,
+    monthly_wages,
+    monthly_loan_payment,
+    total_assets,
+    total_debt,
+    sector,
+    currency,
+    adjustments: adjustments || {}
   };
 
-  // Only add adjustments if they exist and are not empty
-  const payload = { ...basePayload };
-  if (adjustments && Object.keys(adjustments).length > 0) {
-    payload.adjustments = adjustments;
-  }
-
-  console.log('📤 FINAL SIMULATE PAYLOAD:', JSON.stringify(payload, null, 2));
+  console.log('1️⃣2️⃣ FINAL PAYLOAD:', JSON.stringify(payload, null, 2));
+  console.log('1️⃣3️⃣ FINAL PAYLOAD (stringified):', JSON.stringify(payload));
+  console.log('🔴🔴🔴 ========== SIMULATE DEBUG END ==========');
 
   const response = await apiRequest('/simulate', {
     method: 'POST',
@@ -136,7 +169,7 @@ export const simulateStrategy = async (originalData, adjustments) => {
 };
 
 /**
- * 3. Business Coach (/api/coach) - FIXED to match curl command
+ * 3. Business Coach (/api/coach)
  */
 export const getCoachAdvice = async (userData) => {
   const payload = {
