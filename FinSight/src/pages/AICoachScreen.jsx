@@ -335,15 +335,7 @@ const AICoachScreen = () => {
           <h1 className="text-xl font-semibold" style={{ color: '#01272B' }}>
             AI Coach Recommendations
           </h1>
-          {recommendationSource === 'AI Model' ? (
-            <span className="absolute right-4 text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">
-              ML Powered
-            </span>
-          ) : (
-            <span className="absolute right-4 text-xs bg-yellow-100 text-yellow-700 px-2 py-1 rounded-full">
-              Preview Mode
-            </span>
-          )}
+          
         </div>
 
         <div className="px-5 pt-20 pb-6">
