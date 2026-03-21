@@ -169,7 +169,7 @@ export const simulateStrategy = async (originalData, adjustments) => {
 };
 
 /**
- * 3. Business Coach (/api/coach)
+ * 3. Business Coach (/api/coach) - WITH DEBUG LOGS
  */
 export const getCoachAdvice = async (userData) => {
   const payload = {
@@ -180,27 +180,63 @@ export const getCoachAdvice = async (userData) => {
   };
 
   console.log('📤 COACH PAYLOAD:', payload);
+  console.log('🔍 CHECK: Is this being sent to REAL ML API? YES - https://backend-ywt0.onrender.com/api/coach');
 
   const COACH_API_URL = 'https://backend-ywt0.onrender.com/api/coach';
+  
+  const token = getAuthToken();
+  const csrfToken = getCookie('XSRF-TOKEN');
+  
+  console.log('🔐 Auth token present:', !!token);
+  console.log('🔐 CSRF token present:', !!csrfToken);
   
   const response = await fetch(COACH_API_URL, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
-      'Authorization': `Bearer ${getAuthToken()}`,
-      'X-CSRF-Token': getCookie('XSRF-TOKEN')
+      'Authorization': `Bearer ${token}`,
+      'X-CSRF-Token': csrfToken
     },
     body: JSON.stringify(payload),
     credentials: 'include',
   });
 
+  console.log('📥 COACH RESPONSE STATUS:', response.status);
+  console.log('📥 COACH RESPONSE OK:', response.ok);
+  console.log('📥 COACH RESPONSE HEADERS:', Object.fromEntries(response.headers.entries()));
+
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.message || 'Coach API failed');
+    let errorData;
+    try {
+      errorData = await response.json();
+      console.error('❌ COACH ERROR RESPONSE:', errorData);
+    } catch (e) {
+      console.error('❌ COACH ERROR - Could not parse JSON');
+      errorData = { message: `HTTP ${response.status}: ${response.statusText}` };
+    }
+    throw new Error(errorData.message || `Coach API failed with status ${response.status}`);
   }
 
-  return response.json();
+  const data = await response.json();
+  console.log('✅ COACH SUCCESS RESPONSE:', data);
+  console.log('📊 Action Steps received:', data.action_steps?.length || 0);
+  console.log('📊 Growth Tips received:', data.growth_tips?.length || 0);
+  
+  if (data.action_steps && data.action_steps.length > 0) {
+    console.log('📝 First action step:', data.action_steps[0]);
+  }
+  if (data.growth_tips && data.growth_tips.length > 0) {
+    console.log('💡 First growth tip:', data.growth_tips[0]);
+  }
+  
+  console.log('🤖 STATUS: Using REAL ML Model recommendations ✅');
+  
+  return {
+    action_steps: data.action_steps || [],
+    growth_tips: data.growth_tips || [],
+    source: 'AI Model'
+  };
 };
 
 /**
@@ -228,6 +264,7 @@ export const downloadReport = async (coachData) => {
     }
 
     const blob = await response.blob();
+    console.log('✅ PDF DOWNLOAD SUCCESS, size:', blob.size);
     return blob;
   } catch (error) {
     console.error('Download API error:', error);
