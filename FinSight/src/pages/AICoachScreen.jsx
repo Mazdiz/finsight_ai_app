@@ -25,34 +25,34 @@ const AICoachScreen = () => {
   const [finalScore, setFinalScore] = useState(0);
   const [sector, setSector] = useState('');
   const [currencySym, setCurrencySym] = useState('$');
-  const [recommendationSource, setRecommendationSource] = useState('AI Model');
 
-  // Get score color based on value
+  // SECURITY: Get score color with validation
   const getScoreColor = (score) => {
-    if (score >= 80) return '#10B981';
-    if (score >= 60) return '#F59E0B';
-    if (score >= 40) return '#F97316';
+    const safeScore = Math.min(100, Math.max(0, Number(score) || 0));
+    if (safeScore >= 80) return '#10B981';
+    if (safeScore >= 60) return '#F59E0B';
+    if (safeScore >= 40) return '#F97316';
     return '#EF4444';
   };
 
+  // SECURITY: Get status text with validation
   const getStatusTextFromScore = (score) => {
-    if (score >= 80) return 'Excellent';
-    if (score >= 60) return 'Good';
-    if (score >= 40) return 'Fairly Good';
+    const safeScore = Math.min(100, Math.max(0, Number(score) || 0));
+    if (safeScore >= 80) return 'Excellent';
+    if (safeScore >= 60) return 'Good';
+    if (safeScore >= 40) return 'Fairly Good';
     return 'At Risk';
   };
 
   const getStatusColor = (score) => {
-    if (score >= 80) return '#10B981';
-    if (score >= 60) return '#F59E0B';
-    if (score >= 40) return '#F97316';
-    return '#EF4444';
+    return getScoreColor(score);
   };
 
-  // SECURITY MEASURE 1: Authentication check on mount
+  // SECURITY: Authentication check on mount
   useEffect(() => {
     const validateSession = async () => {
       try {
+        // SECURITY: Validate token
         const token = getAuthToken();
         if (!token || !verifyToken(token)) {
           setError('Your session has expired. Please start over.');
@@ -60,31 +60,39 @@ const AICoachScreen = () => {
           return;
         }
 
+        // SECURITY: Check and generate CSRF token
         const csrfToken = getCookie('XSRF-TOKEN');
         if (!csrfToken) {
           generateCSRFToken();
         }
 
-        // Load simulation data
+        // SECURITY: Load and sanitize data from session storage
         const storedSimulation = sessionStorage.getItem('simulationResult');
         const storedUpdatedScore = sessionStorage.getItem('simulationResults');
-        const storedDiagnosis = sessionStorage.getItem('diagnosisResult');
         const storedSector = sessionStorage.getItem('businessSector') || '';
         const storedCurrency = sessionStorage.getItem('currencySymbol') || '$';
         
-        setCurrencySym(storedCurrency);
-        setSector(storedSector);
+        setCurrencySym(sanitizeInput(storedCurrency));
+        setSector(sanitizeInput(storedSector));
 
-        // Get final score from simulation data
+        // SECURITY: Validate and parse score
         let score = 64;
         if (simulationData && simulationData.final_score) {
-          score = simulationData.final_score;
+          score = Math.min(100, Math.max(0, parseInt(simulationData.final_score) || 64));
         } else if (storedSimulation) {
-          const parsed = JSON.parse(storedSimulation);
-          score = parsed.final_score || 64;
+          try {
+            const parsed = JSON.parse(storedSimulation);
+            score = Math.min(100, Math.max(0, parsed.final_score || 64));
+          } catch (e) {
+            console.error('Failed to parse simulation data:', e);
+          }
         } else if (storedUpdatedScore) {
-          const parsed = JSON.parse(storedUpdatedScore);
-          score = parsed.newScore || 64;
+          try {
+            const parsed = JSON.parse(storedUpdatedScore);
+            score = Math.min(100, Math.max(0, parsed.newScore || 64));
+          } catch (e) {
+            console.error('Failed to parse updated score:', e);
+          }
         }
         setFinalScore(score);
 
@@ -92,6 +100,7 @@ const AICoachScreen = () => {
         console.log('✅ AICoachScreen authenticated, score:', score);
         
       } catch (err) {
+        console.error('❌ Validation error:', err);
         setError('Authentication failed. Please try again.');
       } finally {
         setIsLoading(false);
@@ -101,7 +110,7 @@ const AICoachScreen = () => {
     validateSession();
   }, [navigate, simulationData]);
 
-  // Separate useEffect for fetching coach advice
+  // SECURITY: Fetch coach advice with timeout and sanitization
   useEffect(() => {
     const fetchCoachAdvice = async () => {
       if (!isAuthenticated) return;
@@ -109,138 +118,75 @@ const AICoachScreen = () => {
       try {
         setIsLoading(true);
         
-        // Prepare payload for ML model from all available data
+        // SECURITY: Get and validate stored data
         const storedSimulation = sessionStorage.getItem('simulationResult');
         const storedUpdatedScore = sessionStorage.getItem('simulationResults');
-        const storedDiagnosis = sessionStorage.getItem('diagnosisResult');
         
-        // Build comprehensive user data for the ML model
-        const userData = {
-          sector: sector,
-          final_score: finalScore,
-          currency: currency || 'USD',
-          adjusted_data: {},
-          timestamp: Date.now()
-        };
+        // SECURITY: Validate and parse adjusted data
+        let adjustedData = {};
         
-        // Add diagnosis data if available
-        if (diagnosisData) {
-          userData.diagnosis = diagnosisData;
-          console.log('📊 Using diagnosisData from context');
-        } else if (storedDiagnosis) {
-          try {
-            userData.diagnosis = JSON.parse(storedDiagnosis);
-            console.log('📊 Using diagnosisData from sessionStorage');
-          } catch (e) {
-            console.log('Error parsing diagnosis:', e);
-          }
-        }
-        
-        // Add simulation data if available
-        if (simulationData) {
-          userData.simulation = simulationData;
-          userData.adjusted_data = simulationData.adjusted_data || {};
-          console.log('📊 Using simulationData from context');
+        if (simulationData && simulationData.adjusted_data) {
+          adjustedData = simulationData.adjusted_data;
         } else if (storedSimulation) {
           try {
-            userData.simulation = JSON.parse(storedSimulation);
-            userData.adjusted_data = userData.simulation.adjusted_data || {};
-            console.log('📊 Using simulationData from sessionStorage');
+            const parsed = JSON.parse(storedSimulation);
+            adjustedData = parsed.adjusted_data || {};
           } catch (e) {
-            console.log('Error parsing simulation:', e);
+            console.error('Failed to parse simulation:', e);
           }
         } else if (storedUpdatedScore) {
           try {
-            userData.updatedScore = JSON.parse(storedUpdatedScore);
-            console.log('📊 Using updatedScore from sessionStorage');
+            const parsed = JSON.parse(storedUpdatedScore);
+            adjustedData = parsed.adjusted_data || {};
           } catch (e) {
-            console.log('Error parsing updated score:', e);
+            console.error('Failed to parse updated score:', e);
           }
         }
 
-        console.log('📤 Sending to ML Coach Model:', userData);
-        setRecommendationSource('AI Model');
+        // SECURITY: Sanitize all data before sending
+        const sanitizedAdjustedData = {};
+        Object.keys(adjustedData).forEach(key => {
+          const value = Number(adjustedData[key]);
+          if (!isNaN(value) && value >= 0) {
+            sanitizedAdjustedData[sanitizeInput(key)] = value;
+          }
+        });
 
-        // Call the ML model API through your hook
-        const result = await getAdvice(userData);
-        console.log('✅ ML Model response:', result);
+        const userData = {
+          sector: sanitizeInput(sector),
+          final_score: Math.min(100, Math.max(0, finalScore)),
+          currency: sanitizeInput(currency || 'NGN'),
+          adjusted_data: sanitizedAdjustedData
+        };
+
+        console.log('📤 Sending to ML Coach API (sanitized)');
         
-        if (result && result.action_steps && result.growth_tips) {
-          setActionSteps(result.action_steps);
-          setGrowthTips(result.growth_tips);
+        // SECURITY: Call with timeout via hook
+        const result = await getAdvice(userData);
+        
+        // SECURITY: Validate and sanitize response
+        if (result && Array.isArray(result.action_steps) && Array.isArray(result.growth_tips)) {
+          setActionSteps(result.action_steps.map(step => sanitizeInput(step)));
+          setGrowthTips(result.growth_tips.map(tip => sanitizeInput(tip)));
           setCoachData(result);
         } else {
-          // If result is empty but no error, use fallback
-          console.log('⚠️ ML model returned empty, using fallback');
-          setFallbackRecommendations();
+          throw new Error('Invalid response format');
         }
         
       } catch (err) {
         console.error('❌ Coach API failed:', err);
-        setFallbackRecommendations();
+        setError(err.message || 'Failed to get AI recommendations. Please try again.');
       } finally {
         setIsLoading(false);
       }
     };
 
-    // Only fetch if authenticated and score is set
     if (isAuthenticated && finalScore > 0) {
       fetchCoachAdvice();
     }
-  }, [isAuthenticated, finalScore, sector, currency, diagnosisData, simulationData, getAdvice]);
+  }, [isAuthenticated, finalScore, sector, currency, simulationData, getAdvice]);
 
-  // Define the fallback function inside the component
-  const setFallbackRecommendations = () => {
-    setRecommendationSource('Fallback');
-    console.log('📝 Using fallback recommendations for score:', finalScore);
-    
-    if (finalScore >= 80) {
-      setActionSteps([
-        "Maintain your excellent financial health by continuing current strategies.",
-        "Consider expanding your business or investing surplus cash.",
-        "Build an emergency fund covering 6 months of expenses."
-      ]);
-      setGrowthTips([
-        "Explore new market opportunities to leverage your strong position.",
-        "Review your portfolio for diversification options.",
-        "Connect with financial advisors for wealth management strategies."
-      ]);
-    } else if (finalScore >= 60) {
-      setActionSteps([
-        "Focus on reducing your single highest-cost expense within the next 30 days.",
-        "Increase monthly revenue by 10% before taking on additional debt.",
-        "Build a minimum cash reserve equivalent to 2 months of operating expenses."
-      ]);
-      setGrowthTips([
-        "Negotiate longer payment terms with your top 3 suppliers this quarter.",
-        "Audit your product/service pricing against current market rates.",
-        "Join a local business association for access to group purchasing and training."
-      ]);
-    } else if (finalScore >= 40) {
-      setActionSteps([
-        "Immediately cut non-essential expenses by 15%.",
-        "Contact lenders to negotiate lower interest rates on existing debt.",
-        "Focus on collecting outstanding receivables to improve cash flow."
-      ]);
-      setGrowthTips([
-        "Consider consolidating high-interest debt.",
-        "Explore alternative revenue streams with low overhead.",
-        "Create a strict budget and track every expense."
-      ]);
-    } else {
-      setActionSteps([
-        "Seek professional financial advice immediately.",
-        "Create an emergency action plan to address critical issues.",
-        "Consider debt restructuring or consolidation options."
-      ]);
-      setGrowthTips([
-        "Focus on survival strategies first - cash is king.",
-        "Explore government assistance programs for businesses.",
-        "Communicate openly with creditors about your situation."
-      ]);
-    }
-  };
-
+  // SECURITY: Download handler with CSRF regeneration
   const handleDownloadPDF = async () => {
     if (!isAuthenticated) {
       setError('Please authenticate before downloading');
@@ -248,42 +194,45 @@ const AICoachScreen = () => {
     }
 
     setIsDownloading(true);
+    
+    // SECURITY: Regenerate CSRF token for download
     generateCSRFToken();
     
     try {
+      // SECURITY: Sanitize report data
       const reportData = {
-        sector: sector,
-        final_score: finalScore,
-        currency: currency || 'USD',
-        action_steps: actionSteps,
-        growth_tips: growthTips,
-        source: recommendationSource
+        sector: sanitizeInput(sector),
+        final_score: Math.min(100, Math.max(0, finalScore)),
+        currency: sanitizeInput(currency || 'NGN'),
+        action_steps: actionSteps.map(step => sanitizeInput(step)),
+        growth_tips: growthTips.map(tip => sanitizeInput(tip))
       };
       
       await downloadPDFReport(reportData);
       console.log('PDF downloaded successfully');
       
     } catch (err) {
-      console.error('Download failed:', err);
-      downloadScoreAsPDF(
-        finalScore || 64,
-        sector || 'Business',
-        new Date().toLocaleDateString(),
-        { actionSteps, growthTips, source: recommendationSource }
-      );
+      console.error('Download error:', err);
+      setError('Failed to download PDF. Please try again.');
     } finally {
       setIsDownloading(false);
     }
   };
 
+  // SECURITY: New assessment with data cleanup
   const handleNewAssessment = () => {
+    // SECURITY: Regenerate CSRF token
     generateCSRFToken();
+    
+    // SECURITY: Clear all sensitive data
     sessionStorage.removeItem('formData');
     sessionStorage.removeItem('selectedItems');
     sessionStorage.removeItem('simulationData');
     sessionStorage.removeItem('simulationResult');
     sessionStorage.removeItem('simulationResults');
     sessionStorage.removeItem('coachAdvice');
+    sessionStorage.removeItem('diagnosisResult');
+    
     navigate('/business-info');
   };
 
@@ -300,17 +249,23 @@ const AICoachScreen = () => {
     );
   }
 
-  if (error || coachError) {
+  if (error) {
     return (
       <div className="min-h-screen bg-[#DCE5E6] flex justify-center p-4">
         <div className="w-[395px] bg-white rounded-[30px] shadow-xl overflow-hidden relative flex items-center justify-center">
           <div className="text-center p-6">
-            <p className="text-red-500 mb-4">{error || coachError}</p>
+            <p className="text-red-500 mb-4">{error}</p>
             <button
-              onClick={() => navigate('/welcome')}
-              className="px-4 py-2 bg-[#2C6C71] text-white rounded-[10px]"
+              onClick={() => navigate('/updated-score')}
+              className="px-4 py-2 bg-[#2C6C71] text-white rounded-[10px] mr-2"
             >
-              Go to Welcome
+              Go Back
+            </button>
+            <button
+              onClick={() => window.location.reload()}
+              className="px-4 py-2 bg-gray-500 text-white rounded-[10px]"
+            >
+              Try Again
             </button>
           </div>
         </div>
@@ -324,6 +279,7 @@ const AICoachScreen = () => {
         <div className="absolute top-6 left-0 right-0 flex items-center justify-center z-10">
           <button 
             onClick={() => {
+              // SECURITY: Regenerate CSRF token on navigation
               generateCSRFToken();
               navigate('/updated-score');
             }}
@@ -335,7 +291,6 @@ const AICoachScreen = () => {
           <h1 className="text-xl font-semibold" style={{ color: '#01272B' }}>
             AI Coach Recommendations
           </h1>
-          
         </div>
 
         <div className="px-5 pt-20 pb-6">
@@ -357,28 +312,31 @@ const AICoachScreen = () => {
           <div className="bg-[#FFF8F8] rounded-[20px] p-5 mb-6 border-2" style={{ borderColor: '#D9D9D9' }}>
             <h2 className="text-base font-semibold text-gray-800 mb-3">Action Steps:</h2>
             <div className="space-y-3">
-              {actionSteps.map((step, index) => (
+              {actionSteps.length > 0 ? actionSteps.map((step, index) => (
                 <p key={index} className="text-xs text-gray-700 leading-relaxed">
                   <span className="font-bold text-gray-900">{index + 1}.</span> {step}
                 </p>
-              ))}
+              )) : (
+                <p className="text-xs text-gray-500 italic">Loading recommendations...</p>
+              )}
             </div>
           </div>
 
           <div className="bg-[#FFF8F8] rounded-[20px] p-5 mb-6 border-2" style={{ borderColor: '#D9D9D9' }}>
             <h2 className="text-base font-semibold text-gray-800 mb-3">Growth Tips:</h2>
             <div className="space-y-3">
-              {growthTips.map((tip, index) => (
+              {growthTips.length > 0 ? growthTips.map((tip, index) => (
                 <p key={index} className="text-xs text-gray-700 leading-relaxed">
                   <span className="font-bold text-gray-900">•</span> {tip}
                 </p>
-              ))}
+              )) : (
+                <p className="text-xs text-gray-500 italic">Loading tips...</p>
+              )}
             </div>
           </div>
 
           <p className="text-[10px] text-gray-400 text-center leading-relaxed mb-6 px-2">
             These recommendations are generated by our AI model based on your financial data.
-            {recommendationSource === 'AI Model' ? ' Powered by machine learning.' : ' Using preview mode.'}
             They do not constitute professional financial advice.
           </p>
 
